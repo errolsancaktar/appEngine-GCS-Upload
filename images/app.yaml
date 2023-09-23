@@ -1,5 +1,0 @@
-service: image-management
-runtime: python311
-env: standard
-automatic_scaling:
-  min_num_instances: 1
