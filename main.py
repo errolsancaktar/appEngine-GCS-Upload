@@ -30,16 +30,20 @@ def allowed_file(filename):
 def upload():
     return render_template('tsCOL/index.html')
 
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('tsCOL/index.html'), 404
+
 
 @app.route('/', methods=['POST'])
 def upload_file():
     files = request.files.getlist('file')
     formInfo = request.values
-    if 'file' not in request.files:
-        print("problem")
+    print(files)
     uploadCount = len(request.files.getlist('file'))
     for file in files:
-        if file and allowed_file(file.filename):
+        print(file.filename)
+        if file.filename and allowed_file(file.filename):
             longFileName = prepareFileName(secure_filename(file.filename))
             filename = longFileName.split(app.config['UPLOAD_FOLDER'], 1)[1]
             if app.config['LOCAL_UPLOAD']:
@@ -61,7 +65,7 @@ def upload_file():
                 else:
                     print("Image has already been uploaded")
                 # return 'File Successfully Uploaded to GCS'
-        elif 'file' not in file.name:
+        elif not file.filename:
             return 'No file in the request', 400
         elif file and not allowed_file(file.filename):
             return 'This File type is not allowed', 400
