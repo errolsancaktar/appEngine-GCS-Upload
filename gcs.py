@@ -8,6 +8,7 @@ import binascii
 from datetime import timedelta
 import logging
 
+import sys
 ## Logging ##
 logger = logging.getLogger("appLog")
 ConsoleOutputHandler = logging.StreamHandler()
@@ -119,6 +120,8 @@ class GCS:
         fileList = []
         for file in bucket.list_blobs(prefix=prefix):
             fileList.append(file.name)
+        fileList.sort(reverse=True)
+        logger.debug(f'Filelist: {fileList}')
         return fileList
         # for file in files:
         #     print("")
@@ -149,6 +152,55 @@ class GCS:
         # print(dir(imageData))
         return [imageData, blob.content_type, blob.metadata]
 
+    def hashDecode(self, hash):
+        hashByte = binascii.hexlify(base64.urlsafe_b64decode(hash))
+        return bytes.decode(hashByte, 'utf-8')
+
+    def getHash(self, file):
+        storage_client = storage.Client(credentials=self.credentials)
+        bucket = storage_client.bucket(self.bucket)
+        # logger.debug(f'file: {file}')
+        blob = bucket.get_blob(file)
+        # logger.debug(f'blob: {blob}')
+        hash = self.hashDecode(blob.md5_hash)
+        # logger.debug(f'hash: {hash}')
+        return hash
+
+    def cleanDupes(self, prefix=None):
+        dupeCount = 0
+        logger.info(f'Cleaning Duplicates')
+        storage_client = storage.Client(credentials=self.credentials)
+        bucket = storage_client.bucket(self.bucket)
+
+        ## Generate Hashes from all Files in Prefix ##
+        files = self.listFiles(prefix)
+        hashes = []
+        for file in files:
+            hashes.append({'name': file, 'hash': self.getHash(file)})
+        print(hashes)
+        for i in hashes:
+            logger.debug(f"Looking at: {i['name']}")
+            curHash = i['hash']
+            # for j in self.listFiles(prefix):
+            for j in hashes:
+                try:
+                    if curHash == j['hash'] and i['name'] != j['name']:
+                        logger.info(
+                            f"Duplicate of {i['name']} - {i['hash']} found at: {j['name']} - {j['hash']}")
+                        blob = bucket.get_blob(j['name'])
+                        blob.delete()
+                        logger.debug(f"{i['name']} - {j['name']}")
+                        for element in range(len(hashes)):
+                            if hashes[element]['name'] == j['name']:
+                                logger.debug(f"Removing Element: {j['name']}")
+                                del hashes[element]
+                                break
+                        dupeCount += 1
+                        logger.info(f'Deleting: {blob.name}')
+                except AttributeError as e:
+                    logger.debug(f"Finished Files - {e}")
+        return dupeCount
+
 
 # gcs = GCS(project='theresastrecker', bucket='theresa-photo-storage')
 # print(gcs.fileExists("uploads/dumpsterfire.jpg"))
@@ -159,3 +211,4 @@ if __name__ == "__main__":
     # Engine, a webserver process such as Gunicorn will serve the app. This
     # can be configured by adding an `entrypoint` to app.yaml.
     gcs = GCS('theresastrecker', 'errol-test-bucket')
+    gcs.cleanDupes("test/")

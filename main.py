@@ -10,7 +10,7 @@ import re
 from time import sleep
 ## Logging ##
 logger = logging.getLogger("appLog")
-logger.setLevel("DEBUG")
+logger.setLevel("INFO")
 
 app = Flask(__name__)
 
@@ -20,6 +20,8 @@ app.config['UPLOAD_FOLDER'] = "uploads/"
 app.config['GCS_UPLOAD'] = True
 app.config['STORAGE_PROJECT'] = 'theresastrecker'
 app.config['STORAGE_BUCKET'] = 'theresa-photo-storage'
+# app.config['STORAGE_BUCKET'] = 'errol-test-bucket'
+# app.config['UPLOAD_FOLDER'] = "test/"
 cloudStorage = gcs.GCS(project=app.config['STORAGE_PROJECT'],
                        bucket=app.config['STORAGE_BUCKET'])
 
@@ -42,6 +44,12 @@ def page_not_found(e):
     return render_template('tsCOL/index.html'), 404
 
 
+@app.route('/dupes', methods=['GET'])
+def cleanUP():
+    count = f"<H1>Removed {cloudStorage.cleanDupes(app.config['UPLOAD_FOLDER'])} Duplicates</H1>"
+    return count
+
+
 @app.route('/', methods=['POST'])
 def upload_file():
     files = request.files.getlist('file')
@@ -52,7 +60,8 @@ def upload_file():
         logger.info(f'Filename: {file.filename}')
         if file.filename and allowed_file(file.filename):
             logger.debug(secure_filename(file.filename))
-            longFileName = prepareFileName(secure_filename(file.filename))
+            lowerFileName = file.filename.lower()
+            longFileName = prepareFileName(secure_filename(lowerFileName))
             filename = longFileName.split(app.config['UPLOAD_FOLDER'], 1)[1]
             logger.debug(f"filename: {filename}")
             if app.config['GCS_UPLOAD']:
@@ -60,11 +69,11 @@ def upload_file():
                 file.seek(0)
                 if not cloudStorage.fileExists(filename):
                     logger.debug("Uploading File")
-                    if cloudStorage.uploadFile(
-                            file, f"{app.config['UPLOAD_FOLDER']}{filename}", formInfo['name'], formInfo['email']):
-                        return render_template(
-                            'tsCOL/thanks.html', fileCount=uploadCount)
-                    else:
+                    try:
+                        cloudStorage.uploadFile(
+                            file, f"{app.config['UPLOAD_FOLDER']}{filename}", formInfo['name'], formInfo['email'])
+                    except Exception as e:
+                        logger.error(e)
                         return "There was an Error Uploading your Images"
                 else:
                     logger.warning("Image Exists in GCS Bucket")
@@ -135,5 +144,3 @@ if __name__ == "__main__":
     # can be configured by adding an `entrypoint` to app.yaml.
     app.run(host="localhost", port=8080, debug=True)
     logger.setLevel("DEBUG")
-    addNumbertoFile("errolphoto.png")
-    addNumbertoFile("errolphoto-1.png")
