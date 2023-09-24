@@ -1,6 +1,5 @@
 from gcloud import storage
 from oauth2client.service_account import ServiceAccountCredentials
-from google.oauth2 import service_account
 import os
 import json
 import base64
@@ -15,7 +14,7 @@ ConsoleOutputHandler = logging.StreamHandler()
 logger.addHandler(ConsoleOutputHandler)
 logger.setLevel("DEBUG")
 
-LOCAL_DEV = True
+LOCAL_DEV = False
 
 
 class GCS:
@@ -39,10 +38,17 @@ class GCS:
         else:
             self.client = storage.Client()
 
+    def getClient(self):
+        if LOCAL_DEV:
+            storage_client = storage.Client(
+                credentials=self.credentials, project=self.project)
+        else:
+            storage_client = storage.Client(project=self.project)
+        return storage_client
+
     def uploadFile(self, file, filename, uploader, email):
         logger.info(f'Uploading: {filename}')
-        client = storage.Client(credentials=self.credentials,
-                                project=self.project)
+        client = self.getClient()
         storageBucket = client.get_bucket(self.bucket)
         blob = storageBucket.blob(filename)
         blob.content_type = file.content_type
@@ -71,7 +77,7 @@ class GCS:
         """
         # bucket_name = 'your-bucket-name'
         # blob_name = 'your-object-name'
-        storage_client = storage.Client(credentials=self.credentials)
+        storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
         blob = bucket.blob(blob_name)
 
@@ -96,7 +102,7 @@ class GCS:
 
     def fileExists(self, filename):
         logger.debug(f'Checking if {filename} exists')
-        storage_client = storage.Client(credentials=self.credentials)
+        storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
         blob = bucket.blob(filename)
         logger.debug(f' Exists: {blob.exists()}')
@@ -104,7 +110,7 @@ class GCS:
 
     def getFiles(self, prefix=None):
         logger.debug(f'Getting Files from {prefix}')
-        storage_client = storage.Client(credentials=self.credentials)
+        storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
 
         return bucket.list_blobs(prefix=prefix)
@@ -114,7 +120,7 @@ class GCS:
 
     def listFiles(self, prefix=None):
         logger.debug(f'Listing Files from {prefix}')
-        storage_client = storage.Client(credentials=self.credentials)
+        storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
 
         fileList = []
@@ -129,7 +135,7 @@ class GCS:
 
     def dupExists(self, inputHash=None, prefix=None):
         logger.debug(f'Checking for Duplicates')
-        storage_client = storage.Client(credentials=self.credentials)
+        storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
 
         for i in self.listFiles(prefix):
@@ -157,7 +163,7 @@ class GCS:
         return bytes.decode(hashByte, 'utf-8')
 
     def getHash(self, file):
-        storage_client = storage.Client(credentials=self.credentials)
+        storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
         # logger.debug(f'file: {file}')
         blob = bucket.get_blob(file)
@@ -169,7 +175,7 @@ class GCS:
     def cleanDupes(self, prefix=None):
         dupeCount = 0
         logger.info(f'Cleaning Duplicates')
-        storage_client = storage.Client(credentials=self.credentials)
+        storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
 
         ## Generate Hashes from all Files in Prefix ##
