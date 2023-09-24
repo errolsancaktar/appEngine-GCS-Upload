@@ -135,7 +135,7 @@ def prepareFileName(fileExists):
 @app.route("/images/<string:blob_name>")
 def view(blob_name):
     values = cloudStorage.getImage(f'uploads/{blob_name}')
-    return render_template('tsCol/images.html', content_type=values[1],  image=values[0], imageName=blob_name, metadata=values[2])
+    return render_template('tsCOL/images.html', content_type=values[1],  image=values[0], imageName=blob_name, metadata=values[2])
 
 
 if __name__ == "__main__":

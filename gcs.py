@@ -12,7 +12,7 @@ import sys
 logger = logging.getLogger("appLog")
 ConsoleOutputHandler = logging.StreamHandler()
 logger.addHandler(ConsoleOutputHandler)
-logger.setLevel("DEBUG")
+logger.setLevel("INFO")
 
 LOCAL_DEV = False
 
@@ -148,8 +148,10 @@ class GCS:
         return False
 
     def getImage(self, image):
+        storage_client = self.getClient()
+        bucket = storage_client.bucket(self.bucket)
         logger.debug(f'Getting Image {image}')
-        blob = self.storageBucket.get_blob(image)
+        blob = bucket.get_blob(image)
         logger.info(f'getImage: {blob} - {image}')
         content = blob.download_as_string()
         imageData = base64.b64encode(content).decode("utf-8")
@@ -204,7 +206,8 @@ class GCS:
                         dupeCount += 1
                         logger.info(f'Deleting: {blob.name}')
                 except AttributeError as e:
-                    logger.debug(f"Finished Files - {e}")
+                    logger.info(f"Finished Files - {e}")
+        logger.info(f'Completed - removed {dupeCount}')
         return dupeCount
 
 
