@@ -6,8 +6,14 @@ import json
 import base64
 import binascii
 from datetime import timedelta
+import logging
 
-DEBUG = True
+## Logging ##
+logger = logging.getLogger("appLog")
+ConsoleOutputHandler = logging.StreamHandler()
+logger.addHandler(ConsoleOutputHandler)
+logger.setLevel("DEBUG")
+
 LOCAL_DEV = True
 
 
@@ -21,7 +27,7 @@ class GCS:
                 with open(KEYFILE) as jsonFile:
                     self.credentials_dict = json.load(jsonFile)
             else:
-                print("do something")
+                logger.error("do something")
                 exit(199)
             # print(credentials_dict)
             self.credentials = ServiceAccountCredentials.from_json_keyfile_dict(
@@ -31,30 +37,31 @@ class GCS:
             #  project=self.project)
         else:
             self.client = storage.Client()
-        # self.storageBucket = self.client.get_bucket(self.bucket)
 
     def uploadFile(self, file, filename, uploader, email):
+        logger.info(f'Uploading: {filename}')
         client = storage.Client(credentials=self.credentials,
                                 project=self.project)
         storageBucket = client.get_bucket(self.bucket)
-        blob = self.storageBucket.blob(filename)
+        blob = storageBucket.blob(filename)
         blob.content_type = file.content_type
 
         try:
 
             blob.upload_from_file(file)
-            {'uploader': {uploader}, 'email': {email}}
+            # {'uploader': {uploader}, 'email': {email}}
             metadata = {'uploader': uploader, 'email': email}
             blob.metadata = metadata
             blob.patch()
 
         except Exception as e:
 
-            print(e)
-            return "Upload Failed"
-        return "Upload Succeeded"
+            logger.error(e)
+            return False
+        return True
 
     def generate_upload_signed_url_v4(self, blob_name):
+        logger.debug('Generating Signed URL for {blob_name}')
         """Generates a v4 signed URL for uploading a blob using HTTP PUT.
 
         Note that this method requires a service account key file. You can not use
@@ -83,19 +90,19 @@ class GCS:
         #     "curl -X PUT -H 'Content-Type: application/octet-stream' "
         #     "--upload-file my-file '{}'".format(url)
         # )
-        print(url)
+        logger.info(url)
         return url
 
     def fileExists(self, filename):
-
+        logger.debug(f'Checking if {filename} exists')
         storage_client = storage.Client(credentials=self.credentials)
         bucket = storage_client.bucket(self.bucket)
         blob = bucket.blob(filename)
-
+        logger.debug(f' Exists: {blob.exists()}')
         return blob.exists()
 
     def getFiles(self, prefix=None):
-
+        logger.debug(f'Getting Files from {prefix}')
         storage_client = storage.Client(credentials=self.credentials)
         bucket = storage_client.bucket(self.bucket)
 
@@ -105,7 +112,7 @@ class GCS:
         # return files
 
     def listFiles(self, prefix=None):
-
+        logger.debug(f'Listing Files from {prefix}')
         storage_client = storage.Client(credentials=self.credentials)
         bucket = storage_client.bucket(self.bucket)
 
@@ -118,7 +125,7 @@ class GCS:
         # return files
 
     def dupExists(self, inputHash=None, prefix=None):
-
+        logger.debug(f'Checking for Duplicates')
         storage_client = storage.Client(credentials=self.credentials)
         bucket = storage_client.bucket(self.bucket)
 
@@ -132,8 +139,9 @@ class GCS:
         return False
 
     def getImage(self, image):
+        logger.debug(f'Getting Image {image}')
         blob = self.storageBucket.get_blob(image)
-        print(f'getImage: {blob} - {image}')
+        logger.info(f'getImage: {blob} - {image}')
         content = blob.download_as_string()
         imageData = base64.b64encode(content).decode("utf-8")
         # print(blob.content_type)
