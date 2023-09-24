@@ -1,4 +1,5 @@
 from gcloud import storage
+from google.cloud import secretmanager
 from oauth2client.service_account import ServiceAccountCredentials
 import os
 import json
@@ -36,14 +37,26 @@ class GCS:
             # self.client = storage.Client(credentials=self.credentials,
             #  project=self.project)
         else:
-            self.client = storage.Client()
+            secretClient = secretmanager.SecretManagerServiceClient()
+            response = secretClient.access_secret_version(
+                name='projects/422051208073/secrets/tstrec_sa/versions/1')
+            print(type(json.loads(response.payload.data.decode('UTF-8'))))
+            self.credentials = ServiceAccountCredentials.from_json_keyfile_dict(
+                json.loads(response.payload.data.decode('UTF-8')))
+
+    def getSecret(self):
+        secretClient = secretmanager.SecretManagerServiceClient()
+        response = secretClient.access_secret_version(
+            name='projects/422051208073/secrets/tstrec_sa/versions/1')
+        return response.payload.data.decode('UTF-8')
 
     def getClient(self):
         if LOCAL_DEV:
             storage_client = storage.Client(
                 credentials=self.credentials, project=self.project)
         else:
-            storage_client = storage.Client(project=self.project)
+            storage_client = storage.Client(
+                credentials=self.credentials, project=self.project)
         return storage_client
 
     def uploadFile(self, file, filename, uploader, email):
@@ -82,7 +95,7 @@ class GCS:
         blob = bucket.blob(blob_name)
 
         url = blob.generate_signed_url(
-            version="v4",
+            # version="v4",
             # This URL is valid for 15 minutes
             expiration=timedelta(minutes=15),
             # Allow PUT requests using this URL.
@@ -220,4 +233,5 @@ if __name__ == "__main__":
     # Engine, a webserver process such as Gunicorn will serve the app. This
     # can be configured by adding an `entrypoint` to app.yaml.
     gcs = GCS('theresastrecker', 'errol-test-bucket')
-    gcs.cleanDupes("test/")
+    # gcs.cleanDupes("test/")
+    gcs.generate_upload_signed_url_v4("test")
