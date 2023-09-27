@@ -168,6 +168,18 @@ def view(blob_name):
     return render_template('tsCOL/images.html', content_type=values[1],  image=values[0], imageName=blob_name, metadata=values[2])
 
 
+@app.route("/gallery")
+def viewGallery():
+    images = cloudStorage.getFiles(prefix=app.config['UPLOAD_FOLDER'])
+    print(images)
+    imgData = []
+    for image in images:
+        content = base64.b64encode(image.download_as_string()).decode("utf-8")
+        imgData.append(
+            {'content': content, 'name': image.name, 'content_type': image.content_type})
+    return render_template("tsCOL/gallery.html", images=imgData)
+
+
 @app.route('/dupes', methods=['GET'])
 def cleanUP():
     count = f"<H1>Removed {cloudStorage.cleanDupes(app.config['UPLOAD_FOLDER'])} Duplicates</H1>"
@@ -297,4 +309,3 @@ if __name__ == "__main__":
     app.run(host="localhost", port=8080, debug=True)
     LOCAL_DEV = True
     print("DEV")
-    logger.setLevel("DEBUG")
