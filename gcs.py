@@ -170,10 +170,16 @@ class GCS:
         logger.info(f'getImage: {blob} - {image}')
         content = blob.download_as_string()
         imageData = base64.b64encode(content).decode("utf-8")
-        # print(blob.content_type)
-        # print(type(content))
-        # print(dir(imageData))
         return [imageData, blob.content_type, blob.metadata]
+
+    def returnImage(self, image):
+        storage_client = self.getClient()
+        bucket = storage_client.bucket(self.bucket)
+        logger.debug(f'Getting Image {image}')
+        blob = bucket.get_blob(image)
+        logger.info(f'getImage: {blob} - {image}')
+        content = blob.download_as_string()
+        return [content, blob.content_type]
 
     def hashDecode(self, hash):
         hashByte = binascii.hexlify(base64.urlsafe_b64decode(hash))
