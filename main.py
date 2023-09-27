@@ -1,4 +1,3 @@
-from curses import COLOR_BLUE
 import hashlib
 from flask import Flask, render_template, request, Response
 from werkzeug.utils import secure_filename
