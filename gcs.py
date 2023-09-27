@@ -1,3 +1,4 @@
+from tkinter import image_types
 from gcloud import storage
 from google.cloud import secretmanager
 from oauth2client.service_account import ServiceAccountCredentials
@@ -5,6 +6,7 @@ import os
 import json
 import base64
 import binascii
+from wand.image import Image
 from datetime import timedelta
 import logging
 
@@ -39,7 +41,7 @@ class GCS:
         else:
             secretClient = secretmanager.SecretManagerServiceClient()
             response = secretClient.access_secret_version(
-                name='projects/422051208073/secrets/tstrec_sa/versions/1')
+                name='projects/422051208073/secrets/tstrec_sa/versions/latest')
             print(type(json.loads(response.payload.data.decode('UTF-8'))))
             self.credentials = ServiceAccountCredentials.from_json_keyfile_dict(
                 json.loads(response.payload.data.decode('UTF-8')))
@@ -180,11 +182,18 @@ class GCS:
     def getHash(self, file):
         storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
-        # logger.debug(f'file: {file}')
+
         blob = bucket.get_blob(file)
-        # logger.debug(f'blob: {blob}')
         hash = self.hashDecode(blob.md5_hash)
-        # logger.debug(f'hash: {hash}')
+        return hash
+
+    def getImageHash(self, file):
+        image = self.getImage(file)
+        imageData = image[0].encode('ascii')
+        imgType = image[1].rsplit('/', 1)[1]
+        with Image(blob=imageData, format=imgType) as img:
+            hash = img.signature
+        # hash = self.hashDecode(blob.md5_hash)
         return hash
 
     def cleanDupes(self, prefix=None):
@@ -197,6 +206,7 @@ class GCS:
         files = self.listFiles(prefix)
         hashes = []
         for file in files:
+
             hashes.append({'name': file, 'hash': self.getHash(file)})
         print(hashes)
         for i in hashes:
@@ -232,6 +242,7 @@ if __name__ == "__main__":
     # Used when running locally only. When deploying to Google App
     # Engine, a webserver process such as Gunicorn will serve the app. This
     # can be configured by adding an `entrypoint` to app.yaml.
-    gcs = GCS('theresastrecker', 'errol-test-bucket')
+    # gcs = GCS('theresastrecker', 'errol-test-bucket')
+    gcs = GCS('theresastrecker', 'theresa-photo-storage')
     # gcs.cleanDupes("test/")
-    gcs.generate_upload_signed_url_v4("test")
+    # gcs.generate_upload_signed_url_v4("test")
