@@ -1,8 +1,10 @@
+from curses import COLOR_BLUE
 import hashlib
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, Response
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
 import os
+import base64
 import logging
 import gcs
 import re
@@ -134,8 +136,27 @@ def prepareFileName(fileExists):
 
 @app.route("/images/<string:blob_name>")
 def view(blob_name):
-    values = cloudStorage.getImage(f'uploads/{blob_name}')
+    values = cloudStorage.getImage(f"{app.config['UPLOAD_FOLDER']}{blob_name}")
     return render_template('tsCOL/images.html', content_type=values[1],  image=values[0], imageName=blob_name, metadata=values[2])
+
+
+@app.route("/image/<string:blob_name>")
+def returnImage(blob_name):
+    values = cloudStorage.returnImage(
+        f"{app.config['UPLOAD_FOLDER']}{blob_name}")
+    return Response(values[0], mimetype=values[1])
+
+
+@app.route("/gallery")
+def viewGallery():
+    images = cloudStorage.listFiles(prefix=app.config['UPLOAD_FOLDER'])
+    imageList = []
+    print(images)
+    for image in images:
+        print(image)
+        imageList.append(image.rsplit('/', 1)[1])
+    print(images)
+    return render_template("tsCOL/gallery.html", images=imageList)
 
 
 if __name__ == "__main__":
