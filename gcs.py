@@ -1,4 +1,3 @@
-from tkinter import image_types
 from gcloud import storage
 from google.cloud import secretmanager
 from oauth2client.service_account import ServiceAccountCredentials
