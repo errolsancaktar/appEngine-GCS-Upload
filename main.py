@@ -4,7 +4,7 @@ from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
 import os
 import logging
-import google.cloud.logging_v2
+import google.cloud.logging
 from google.cloud.logging_v2.handlers import CloudLoggingHandler
 import gcs
 import re
@@ -27,11 +27,41 @@ cloudStorage = gcs.GCS(project=app.config['STORAGE_PROJECT'],
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'heic', 'heif', 'webp', 'tif',
                       'tiff', 'raw', 'bmp', 'pdf', 'mpeg', 'mpg', 'ogg', 'mp4', 'avi', 'mov'}
 
-
 ## Routing ##
+
+
 @app.route('/')
 def upload():
     return render_template('tsCOL/index.html')
+
+
+@app.route('/sup', methods=['POST'])
+def supload():
+    if request.method == 'POST':
+        content_type = request.values.get('file_type')
+        filename = request.values.get('file_name')
+        if app.config['UPLOAD_METHOD'] == "GCS":
+            if filename and allowed_file(filename):
+                logger.debug(secure_filename(filename))
+                lowerFileName = filename.lower()
+                longFileName = prepareFileName(
+                    secure_filename(lowerFileName))
+                filename = longFileName.split(
+                    app.config['UPLOAD_FOLDER'], 1)[1]
+                logger.debug(f"filename: {filename}")
+                content_type = content_type
+                logger.debug("Getting Upload URL")
+                try:
+                    # respo = "Test"
+                    respo = cloudStorage.generate_upload_signed_url(
+                        f"{app.config['UPLOAD_FOLDER']}{filename}", content_type)
+
+                except Exception as e:
+                    logger.error(e)
+                    return "Problem with URL Response"
+            if 'https://storage.googleapis.com' not in respo:
+                return "something about not being an allowed file"
+    return respo
 
 
 @app.route('/', methods=['POST'])
@@ -48,6 +78,7 @@ def upload_file():
             longFileName = prepareFileName(secure_filename(lowerFileName))
             filename = longFileName.split(app.config['UPLOAD_FOLDER'], 1)[1]
             logger.debug(f"filename: {filename}")
+            content_type = file.content_type
             if app.config['UPLOAD_METHOD'] == "APPENGINE":
                 file.seek(0)
                 if not cloudStorage.fileExists(filename):
@@ -63,29 +94,28 @@ def upload_file():
             if app.config['UPLOAD_METHOD'] == "GCS":
                 file.seek(0)
                 if not cloudStorage.fileExists(filename):
-                    logging.debug("Uploading File")
+                    logger.debug("Uploading File")
 
                     try:
 
-                        signedUrl = cloudStorage.generate_upload_signed_url(
+                        respo = cloudStorage.generate_upload_signed_url(
                             f"{app.config['UPLOAD_FOLDER']}{filename}", content_type)
-                        logging.debug(signedUrl)
-                        return signedUrl
+                        logger.debug(respo.__dict__)
+                        logger.debug(respo)
 
                     except Exception as e:
 
-                        logging.error(e)
+                        logger.error(e)
                         return "There was an Error Uploading your Images"
                 else:
-                    logging.warning("Image Exists in GCS Bucket")
-
+                    logger.warning("Image Exists in GCS Bucket")
         elif not file.filename:
             return 'No file in the request', 400
         elif file and not allowed_file(file.filename):
             return 'This File type is not allowed', 400
-
+    return "true"
     # return render_template('tsCOL/thanks.html', fileCount=uploadCount)
-    return True
+
 
 @app.route("/images/<string:blob_name>")
 def view(blob_name):
@@ -105,6 +135,7 @@ def allowed_file(filename):
 
 ### Error Pages ###
 
+
 @app.errorhandler(404)
 def page_not_found(e):
     return render_template('tsCOL/index.html'), 404
@@ -118,10 +149,10 @@ def file_too_large(e):
 ### Methods ###
 
 def setupCloudLogging():
-    logging_client = google.cloud.logging_v2.Client()
+    logging_client = google.cloud.logging.Client()
     handler = CloudLoggingHandler(logging_client)
     # Set Cloud Side
-    logger = logging.getLogger('cloudLogger')
+    logger = logging.getLogger('COLApp')
     logger.setLevel(logging.DEBUG)
     logger.addHandler(handler)
 
@@ -181,9 +212,9 @@ else:
     logger.setLevel("DEBUG")
 
 
-
 ## Debugging ##
 if __name__ == "__main__":
-    LOCAL_DEV = True
     app.run(host="localhost", port=8080, debug=True)
+    LOCAL_DEV = True
+    print("DEV")
     logger.setLevel("DEBUG")

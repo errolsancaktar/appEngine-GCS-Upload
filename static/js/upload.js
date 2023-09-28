@@ -10,14 +10,24 @@ uploadForm.addEventListener("submit", e => {
         console.log(upfiles.files[i].name)
         formData.append("file_name", upfiles.files[i].name)
         formData.append("file_type", upfiles.files[i].type)
-        fetch("/", {
+        fetch("/sup", {
             method: "post",
             body: formData,
 
-        }).then(res => res.text()).then(text => postIt(text))
+            // }).then(res => res.text()).then(text => postIt(text))
+        })
+            .then(response => response.text())
+            .then(data => postIt(data));
+
+        // .then(function (result) {
+        //     console.log(result.text());
+        //     // text = result.text();
+        //     // // console.log(text);
+        //     // postIt(text);
+        // }
+        // );
+
         let postIt = (data) => {
-            console.log(data);
-            console.log(upfiles.files[i])
             fetch(data, {
                 method: "PUT",
                 body: upfiles.files[i],

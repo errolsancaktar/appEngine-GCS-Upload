@@ -7,15 +7,17 @@ import base64
 import binascii
 from datetime import timedelta
 import logging
-import google.cloud.logging_v2
+import google.cloud.logging
 from google.cloud.logging_v2.handlers import CloudLoggingHandler
 import sys
 
 
-## Variables
+# Variables
 LOCAL_DEV = False
 
-## Class Definition
+# Class Definition
+
+
 class GCS:
     def __init__(self, project, bucket):
         self.project = project
@@ -32,20 +34,21 @@ class GCS:
         if not LOCAL_DEV:
             self.logger = self.setupCloudLogging()
             self.logger.setLevel("DEBUG")
+            self.logger.debug("Done Logging Setup")
         else:
             self.logger = logging.getLogger()
             self.logger.setLevel("DEBUG")
 
     def setupCloudLogging(self):
-        logging_client = google.cloud.logging_v2.Client()
+        logging_client = google.cloud.logging.Client()
         handler = CloudLoggingHandler(logging_client)
         # Set Cloud Side
-        self.logger = logging.getLogger('cloudLogger')
-        self.logger.setLevel(logging.DEBUG)
-        self.logger.addHandler(handler)
+        self.logger1 = logging.getLogger('GCS_Module')
+        self.logger1.setLevel(logging.DEBUG)
+        self.logger1.addHandler(handler)
 
-        self.logger.info("Cloud Logging Setup")
-        return self.logger
+        self.logger1.info("GCS Module Cloud Logging Setup")
+        return self.logger1
 
     def getSecret(self):
         secretClient = secretmanager.SecretManagerServiceClient()
@@ -95,27 +98,27 @@ class GCS:
         self.logger.debug(
             f"Patched Metadata, New Data is: name: {uploader} - email: {email}")
 
-    def generate_upload_signed_url_v4(self, blob_name):
-        self.logger.debug('Generating Signed URL for {blob_name}')
+    def generate_upload_signed_url(self, blob_name, content_type):
+        self.logger.debug(f'Generating Signed URL for {blob_name}')
+        self.logger.info(f'Generating Signed URL for {blob_name}')
         """Generates a v4 signed URL for uploading a blob using HTTP PUT.
 
         Note that this method requires a service account key file. You can not use
         this if you are using Application Default Credentials from Google Compute
         Engine or from the Google Cloud SDK.
         """
-        # bucket_name = 'your-bucket-name'
-        # blob_name = 'your-object-name'
+
         storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
         blob = bucket.blob(blob_name)
-
         url = blob.generate_signed_url(
             # version="v4",
             # This URL is valid for 15 minutes
             expiration=timedelta(minutes=15),
             # Allow PUT requests using this URL.
             method="PUT",
-            content_type="application/octet-stream",
+            # content_type="application/octet-stream",
+            content_type=content_type
         )
 
         # print("Generated PUT signed URL:")
@@ -125,6 +128,7 @@ class GCS:
         #     "curl -X PUT -H 'Content-Type: application/octet-stream' "
         #     "--upload-file my-file '{}'".format(url)
         # )
+        self.logger.debug(f'{ content_type},{blob_name}')
         self.logger.info(url)
         return url
 
@@ -242,9 +246,10 @@ class GCS:
 # print(gcs.listFiles())
 if __name__ == "__main__":
     LOCAL_DEV = False
+    print("DEV")
     # Used when running locally only. When deploying to Google App
     # Engine, a webserver process such as Gunicorn will serve the app. This
     # can be configured by adding an `entrypoint` to app.yaml.
-    gcs = GCS('theresastrecker', 'errol-test-bucket')
+    gcs = GCS('theresastrecker', 'theresa-photo-storage')
     # gcs.cleanDupes("test/")
     # gcs.generate_upload_signed_url_v4("test")

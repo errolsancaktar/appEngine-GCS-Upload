@@ -10,24 +10,24 @@ $(window).on('popstate', function (e) {
 	}
 });
 
-$("input[type='submit']").click(function () {
-	if (document.getElementById("file").value == "") {
-		$("div.spanner-error").removeClass("hide");
-		$("div.over-error").removeClass("hide");
-		$("div.spanner-error").addClass("show");
-		$("div.over-error").addClass("show");
-	} else {
-		$("div.spanner").addClass("show");
-		$("div.overlay").addClass("show");
-	}
-});
+// $("input[type='submit']").click(function () {
+// 	if (document.getElementById("file").value == "") {
+// 		$("div.spanner-error").removeClass("hide");
+// 		$("div.over-error").removeClass("hide");
+// 		$("div.spanner-error").addClass("show");
+// 		$("div.over-error").addClass("show");
+// 	} else {
+// 		$("div.spanner").addClass("show");
+// 		$("div.overlay").addClass("show");
+// 	}
+// });
 
-$('#spanner-error').click(function (event) {
-	$("div.spanner-error").removeClass("show");
-	$("div.over-error").removeClass("show");
-	$("div.spanner-error").addClass("hide");
-	$("div.over-error").addClass("hide");
-});
+// $('#spanner-error').click(function (event) {
+// 	$("div.spanner-error").removeClass("show");
+// 	$("div.over-error").removeClass("show");
+// 	$("div.spanner-error").addClass("hide");
+// 	$("div.over-error").addClass("hide");
+// });
 
 function validateEmail(email) {
 	var regex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
