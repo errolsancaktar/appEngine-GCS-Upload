@@ -9,21 +9,21 @@ from datetime import timedelta
 import logging
 import google.cloud.logging_v2
 from google.cloud.logging_v2.handlers import CloudLoggingHandler
-
 import sys
 
 
+## Variables
 LOCAL_DEV = False
 
-
+## Class Definition
 class GCS:
     def __init__(self, project, bucket):
         self.project = project
         self.bucket = bucket
+
         ## Set up Secret Manager for Elevated Access ##
         secretClient = secretmanager.SecretManagerServiceClient()
         response = self.getSecret()
-        # print(type(json.loads(response.payload.data.decode('UTF-8'))))
         self.credentials = ServiceAccountCredentials.from_json_keyfile_dict(
             json.loads(response)
         )
@@ -50,7 +50,7 @@ class GCS:
     def getSecret(self):
         secretClient = secretmanager.SecretManagerServiceClient()
         response = secretClient.access_secret_version(
-            name='projects/422051208073/secrets/tstrec_sa/versions/2')
+            name='projects/422051208073/secrets/tstrec_sa/versions/latest')
         return response.payload.data.decode('UTF-8')
 
     def getClient(self):

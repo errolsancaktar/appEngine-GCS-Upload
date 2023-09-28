@@ -75,7 +75,7 @@
 								data-aos-delay="0">
 								Please share your memories of Theresa with us</h1>
 							<div class="img-fluid rounded mx-auto d-block">
-								<form action="/" method="POST" enctype="multipart/form-data">
+								<form id="fileuploader">
 									<div class="fileInput">
 										<input class="form-control" type="file" name="file" id="file" multiple />
 									</div>
@@ -90,8 +90,7 @@
 											aria-describedby="email-span">
 									</div>
 									<input type="submit" id="sumbit"
-										class="btn-secondary rounded btn-lg mx-auto d-block" onclick="this.submit(); this.disabled=true; setTimeout(() => { this.disabled=false;
-										}, 5000);" on value="Upload Media" />
+										class="btn-secondary rounded btn-lg mx-auto d-block" value="Upload Media" />
 								</form>
 							</div>
 						</div>
