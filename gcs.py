@@ -1,7 +1,6 @@
-from gcloud import storage
-from google.cloud import secretmanager
-from oauth2client.service_account import ServiceAccountCredentials
-import os
+from google.cloud import secretmanager, storage
+from google.oauth2 import service_account
+import google.auth
 import json
 import base64
 import binascii
@@ -9,7 +8,6 @@ from datetime import timedelta
 import logging
 import google.cloud.logging
 from google.cloud.logging_v2.handlers import CloudLoggingHandler
-import sys
 
 
 # Variables
@@ -26,7 +24,7 @@ class GCS:
         ## Set up Secret Manager for Elevated Access ##
         secretClient = secretmanager.SecretManagerServiceClient()
         response = self.getSecret()
-        self.credentials = ServiceAccountCredentials.from_json_keyfile_dict(
+        self.credentials = service_account.Credentials.from_service_account_info(
             json.loads(response)
         )
 
@@ -98,8 +96,7 @@ class GCS:
         self.logger.debug(
             f"Patched Metadata, New Data is: name: {uploader} - email: {email}")
 
-    def generate_upload_signed_url(self, blob_name, content_type):
-        self.logger.debug(f'Generating Signed URL for {blob_name}')
+    def generate_upload_signed_url(self, blob_name, content_type, header):
         self.logger.info(f'Generating Signed URL for {blob_name}')
         """Generates a v4 signed URL for uploading a blob using HTTP PUT.
 
@@ -110,15 +107,15 @@ class GCS:
 
         storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
+        self.logger.debug(self.bucket)
+        self.logger.debug(bucket)
         blob = bucket.blob(blob_name)
         url = blob.generate_signed_url(
-            # version="v4",
-            # This URL is valid for 15 minutes
+            version="v4",
             expiration=timedelta(minutes=15),
-            # Allow PUT requests using this URL.
             method="PUT",
-            # content_type="application/octet-stream",
-            content_type=content_type
+            content_type=content_type,
+            headers=header
         )
 
         # print("Generated PUT signed URL:")
@@ -128,8 +125,8 @@ class GCS:
         #     "curl -X PUT -H 'Content-Type: application/octet-stream' "
         #     "--upload-file my-file '{}'".format(url)
         # )
-        self.logger.debug(f'{ content_type},{blob_name}')
-        self.logger.info(url)
+        self.logger.debug(f'FileInfo: { content_type},{blob_name}')
+        self.logger.debug(f'URL: url')
         return url
 
     def fileExists(self, filename):

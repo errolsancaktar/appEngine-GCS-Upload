@@ -71,6 +71,11 @@
 				<div class="col-xl-10">
 					<div class="row flex-column-reverse flex-md-row align-items-stretch text-center text-md-left">
 						<div class="col-lg-7 col-md-9 pt-40">
+							<div id="myModal" class="modal">
+								<div class="modal-content" id="modal-content">
+									<div class="modal-update" id="modal-update">Filename</div>
+								</div>
+							</div>
 							<h1 class="mb-20 text-center" data-aos-duration="600" data-aos="fade-down"
 								data-aos-delay="0">
 								Please share your memories of Theresa with us</h1>
@@ -81,32 +86,19 @@
 									</div>
 									<div class="input-group mb-3">
 										<span class="input-group-text" id="name-span">Name:</span>
-										<input type="text" class="form-control" name="name" aria-label="Your Name"
-											aria-describedby="name-span">
+										<input type="text" class="form-control" name="name" id="formName"
+											aria-label="Your Name" aria-describedby="name-span">
 									</div>
 									<div class="input-group mb-3">
 										<span class="input-group-text" id="email-span">Email:</span>
-										<input type="text" class="form-control" name="email" aria-label="Email"
-											aria-describedby="email-span">
+										<input type="text" class="form-control" name="email" id="formEmail"
+											aria-label="Email" aria-describedby="email-span">
 									</div>
 									<input type="submit" id="sumbit"
 										class="btn-secondary rounded btn-lg mx-auto d-block" value="Upload Media" />
 								</form>
 							</div>
 						</div>
-						<div class="overlay"></div>
-						<div class="spanner">
-							<div class="loader"></div>
-							<p>Uploading files, please be patient.</p>
-						</div>
-						<div id="spanner-error" class="spanner-error">
-							<div class="over-error">
-								<div class="loader"></div>
-								<p>Please Add Files Before Uploading</p>
-								<button class="btn-info">OK</button>
-							</div>
-						</div>
-
 						<div class="img-fluid col-lg-5 col-md-3 d-flex align-items-center" data-aos-duration="600"
 							data-aos="fade-down" data-aos-delay="1200">
 							<img src="static/i/theresa.jpg" class="img-fluid" alt="" />

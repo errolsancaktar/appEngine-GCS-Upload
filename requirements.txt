@@ -13,4 +13,5 @@ google-cloud-core==2.3.3
 google-cloud-logging==3.6.0
 google-cloud-secret-manager==2.16.4
 google-cloud-service-management==1.6.1
+google-cloud-storage==2.11.0
 googleapis-common-protos==1.60.0

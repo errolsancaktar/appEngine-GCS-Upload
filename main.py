@@ -38,12 +38,24 @@ def upload():
 @app.route('/sup', methods=['POST'])
 def supload():
     if request.method == 'POST':
+        # Gatger values from post data #
         content_type = request.values.get('file_type')
         filename = request.values.get('file_name')
+        fileHeader = {
+            'x-goog-meta-email': request.values.get('formEmail'),
+            'x-goog-meta-uploader': request.values.get('formName')
+        }
+        logger.debug(fileHeader)
+        logger.debug(request.args)
+        # validation
         if app.config['UPLOAD_METHOD'] == "GCS":
+
+            # Check filetype is ok
             if filename and allowed_file(filename):
                 logger.debug(secure_filename(filename))
                 lowerFileName = filename.lower()
+
+                # Validates filename checking if exists, increments if it does - returns filename
                 longFileName = prepareFileName(
                     secure_filename(lowerFileName))
                 filename = longFileName.split(
@@ -51,23 +63,42 @@ def supload():
                 logger.debug(f"filename: {filename}")
                 content_type = content_type
                 logger.debug("Getting Upload URL")
-                try:
-                    # respo = "Test"
-                    respo = cloudStorage.generate_upload_signed_url(
-                        f"{app.config['UPLOAD_FOLDER']}{filename}", content_type)
 
-                except Exception as e:
-                    logger.error(e)
-                    return "Problem with URL Response"
-            if 'https://storage.googleapis.com' not in respo:
+                # Request Signed URL from the googs and return it for the browser to do things
+                respo = cloudStorage.generate_upload_signed_url(
+                    f"{app.config['UPLOAD_FOLDER']}{filename}", content_type, fileHeader
+                )
+
+                # Fail if its not really a google link
+                if 'https://storage.googleapis.com' not in respo:
+                    logger.error("issue with url")
+                    return "Somethings wrong with Googles"
+
+                logger.debug(f"{app.config['UPLOAD_FOLDER']}{filename}")
+                logger.debug(f'Url: {respo}')
+                return respo
+                # # Add all that awesome information
+                # try:
+                #     cloudStorage.addMetadata(
+                #         f"{app.config['UPLOAD_FOLDER']}{filename}", uploader, email)
+                #     return "Thanks"
+
+                # except Exception as e:
+                #     return f"Problem With Googs - {e}"
+
+            else:
                 return "something about not being an allowed file"
-    return respo
 
 
 @app.route('/', methods=['POST'])
 def upload_file():
+
+    # Get all the Files
     files = request.files.getlist('file')
+
+    # Get the Form Text
     formInfo = request.values
+
     logger.debug(f'File Object: {files}')
     uploadCount = len(request.files.getlist('file'))
     for file in files:
@@ -100,7 +131,6 @@ def upload_file():
 
                         respo = cloudStorage.generate_upload_signed_url(
                             f"{app.config['UPLOAD_FOLDER']}{filename}", content_type)
-                        logger.debug(respo.__dict__)
                         logger.debug(respo)
 
                     except Exception as e:
@@ -113,8 +143,8 @@ def upload_file():
             return 'No file in the request', 400
         elif file and not allowed_file(file.filename):
             return 'This File type is not allowed', 400
-    return "true"
-    # return render_template('tsCOL/thanks.html', fileCount=uploadCount)
+    # return "true"
+    return render_template('tsCOL/thanks.html', fileCount=uploadCount)
 
 
 @app.route("/images/<string:blob_name>")
@@ -127,6 +157,15 @@ def view(blob_name):
 def cleanUP():
     count = f"<H1>Removed {cloudStorage.cleanDupes(app.config['UPLOAD_FOLDER'])} Duplicates</H1>"
     return count
+
+
+@app.route('/thanks')
+def thanks():
+    count = request.args.get('count')
+    logger.debug(f'File Count: {count}')
+    # if not fileCount:
+    #     fileCount = "Many"
+    return render_template('tsCOL/thanks.html', fileCount=count)
 
 
 def allowed_file(filename):
@@ -204,7 +243,7 @@ def prepareFileName(fileExists):
 
 ## Logging ##
 logging.info("Setup Logging")
-if not LOCAL_DEV:
+if LOCAL_DEV != False:
     logger = setupCloudLogging()
     logger.setLevel("DEBUG")
 else:
