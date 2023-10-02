@@ -1,5 +1,5 @@
-import hashlib
-from flask import Flask, render_template, request
+import json
+from flask import Flask, render_template, request, jsonify
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
 import os
@@ -37,57 +37,70 @@ def upload():
 
 @app.route('/sup', methods=['POST'])
 def supload():
-    if request.method == 'POST':
-        # Gatger values from post data #
-        content_type = request.values.get('file_type')
-        filename = request.values.get('file_name')
-        fileHeader = {
-            'x-goog-meta-email': request.values.get('formEmail'),
-            'x-goog-meta-uploader': request.values.get('formName')
-        }
-        logger.debug(fileHeader)
-        logger.debug(request.args)
-        # validation
-        if app.config['UPLOAD_METHOD'] == "GCS":
+    responseList = []
+    for req in request.form:
+        item = json.loads(request.form.get(req))
 
-            # Check filetype is ok
-            if filename and allowed_file(filename):
-                logger.debug(secure_filename(filename))
-                lowerFileName = filename.lower()
+        if request.method == 'POST':
+            # Gather values from post data #
+            content_type = item['type']
+            filename = req
+            logger.debug(f'FileName: {filename}')
+            fileHeader = {
+                'x-goog-meta-email': item['email'],
+                'x-goog-meta-uploader': item['name']
+            }
+            logger.debug(fileHeader)
+            logger.debug(
+                f"{filename} -> {item['type']} -> {item['name']} -> {item['email']} -> {allowed_file(filename)}")
+            # validation
+            if app.config['UPLOAD_METHOD'] == "GCS":
+                logger.debug("In Upload Phase")
+                # Check filetype is ok
+                if filename and allowed_file(filename):
+                    logger.debug(
+                        f'SecureFilename: {secure_filename(filename)}')
+                    lowerFileName = filename.lower()
+                    logger.debug("Filename exists and Type is Allowed")
+                    # Validates filename checking if exists, increments if it does - returns filename
+                    longFileName = prepareFileName(
+                        secure_filename(lowerFileName))
+                    filename = longFileName.split(
+                        app.config['UPLOAD_FOLDER'], 1)[1]
+                    logger.debug(f"filename: {filename}")
+                    content_type = content_type
+                    logger.debug("Getting Upload URL")
+                    logger.debug(
+                        f"{app.config['UPLOAD_FOLDER']}{filename}, {content_type}, {fileHeader}")
+                    # Request Signed URL from the googs and return it for the browser to do things
+                    respo = cloudStorage.generate_upload_signed_url(
+                        f"{app.config['UPLOAD_FOLDER']}{filename}", content_type, fileHeader
+                    )
+                    # Fail if its not really a google link
+                    # logger.debug(respo)
+                    print(respo)
+                    # if 'https://storage.googleapis.com' not in respo:
+                    #     logger.error("issue with url")
+                    #     return "Somethings wrong with Googles"
 
-                # Validates filename checking if exists, increments if it does - returns filename
-                longFileName = prepareFileName(
-                    secure_filename(lowerFileName))
-                filename = longFileName.split(
-                    app.config['UPLOAD_FOLDER'], 1)[1]
-                logger.debug(f"filename: {filename}")
-                content_type = content_type
-                logger.debug("Getting Upload URL")
+                    # logger.debug(f"{app.config['UPLOAD_FOLDER']}{filename}")
+                    responseList.append({'filename': req, 'url': respo})
+                    # # Add all that awesome information
+                    # try:
+                    #     cloudStorage.addMetadata(
+                    #         f"{app.config['UPLOAD_FOLDER']}{filename}", uploader, email)
+                    #     return "Thanks"
 
-                # Request Signed URL from the googs and return it for the browser to do things
-                respo = cloudStorage.generate_upload_signed_url(
-                    f"{app.config['UPLOAD_FOLDER']}{filename}", content_type, fileHeader
-                )
+                    # except Exception as e:
+                    #     return f"Problem With Googs - {e}"
 
-                # Fail if its not really a google link
-                if 'https://storage.googleapis.com' not in respo:
-                    logger.error("issue with url")
-                    return "Somethings wrong with Googles"
-
-                logger.debug(f"{app.config['UPLOAD_FOLDER']}{filename}")
-                logger.debug(f'Url: {respo}')
-                return respo
-                # # Add all that awesome information
-                # try:
-                #     cloudStorage.addMetadata(
-                #         f"{app.config['UPLOAD_FOLDER']}{filename}", uploader, email)
-                #     return "Thanks"
-
-                # except Exception as e:
-                #     return f"Problem With Googs - {e}"
-
+                else:
+                    return "something about not being an allowed file"
             else:
-                return "something about not being an allowed file"
+                return "Good"
+        print(responseList)
+        logger.debug(f'Response: {jsonify(responseList)}')
+    return jsonify(responseList)
 
 
 @app.route('/', methods=['POST'])
@@ -169,8 +182,9 @@ def thanks():
 
 
 def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    lower = filename.lower()
+    return '.' in lower.lower() and \
+           lower.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 ### Error Pages ###
 
