@@ -1,16 +1,16 @@
-import hashlib
-from flask import Flask, render_template, request
+import json
+from flask import Flask, render_template, request, jsonify
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
 import os
 import logging
+import google.cloud.logging
+from google.cloud.logging_v2.handlers import CloudLoggingHandler
 import gcs
 import re
 
-from time import sleep
-## Logging ##
-logger = logging.getLogger("appLog")
-logger.setLevel("INFO")
+LOCAL_DEV = False
+
 
 app = Flask(__name__)
 
@@ -18,20 +18,16 @@ app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 784 * 1024 * 1024  # 784 MB
 app.config['UPLOAD_FOLDER'] = "uploads/"
 app.config['GCS_UPLOAD'] = True
+app.config['UPLOAD_METHOD'] = "GCS"
 app.config['STORAGE_PROJECT'] = 'theresastrecker'
 app.config['STORAGE_BUCKET'] = 'theresa-photo-storage'
-# app.config['STORAGE_BUCKET'] = 'errol-test-bucket'
-# app.config['UPLOAD_FOLDER'] = "test/"
 cloudStorage = gcs.GCS(project=app.config['STORAGE_PROJECT'],
                        bucket=app.config['STORAGE_BUCKET'])
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'heic', 'heif', 'webp', 'tif',
                       'tiff', 'raw', 'bmp', 'pdf', 'mpeg', 'mpg', 'ogg', 'mp4', 'avi', 'mov'}
 
-
-def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+## Routing ##
 
 
 @app.route('/')
@@ -39,21 +35,83 @@ def upload():
     return render_template('tsCOL/index.html')
 
 
-@app.errorhandler(404)
-def page_not_found(e):
-    return render_template('tsCOL/index.html'), 404
+@app.route('/sup', methods=['POST'])
+def supload():
+    responseList = []
+    for req in request.form:
+        item = json.loads(request.form.get(req))
 
+        if request.method == 'POST':
+            # Gather values from post data #
+            content_type = item['type']
+            filename = req
+            logger.debug(f'FileName: {filename}')
+            fileHeader = {
+                'x-goog-meta-email': item['email'],
+                'x-goog-meta-uploader': item['name']
+            }
+            logger.debug(fileHeader)
+            logger.debug(
+                f"{filename} -> {item['type']} -> {item['name']} -> {item['email']} -> {allowed_file(filename)}")
+            # validation
+            if app.config['UPLOAD_METHOD'] == "GCS":
+                logger.debug("In Upload Phase")
+                # Check filetype is ok
+                if filename and allowed_file(filename):
+                    logger.debug(
+                        f'SecureFilename: {secure_filename(filename)}')
+                    lowerFileName = filename.lower()
+                    logger.debug("Filename exists and Type is Allowed")
+                    # Validates filename checking if exists, increments if it does - returns filename
+                    longFileName = prepareFileName(
+                        secure_filename(lowerFileName))
+                    filename = longFileName.split(
+                        app.config['UPLOAD_FOLDER'], 1)[1]
+                    logger.debug(f"filename: {filename}")
+                    content_type = content_type
+                    logger.debug("Getting Upload URL")
+                    logger.debug(
+                        f"{app.config['UPLOAD_FOLDER']}{filename}, {content_type}, {fileHeader}")
+                    # Request Signed URL from the googs and return it for the browser to do things
+                    respo = cloudStorage.generate_upload_signed_url(
+                        f"{app.config['UPLOAD_FOLDER']}{filename}", content_type, fileHeader
+                    )
+                    # Fail if its not really a google link
+                    # logger.debug(respo)
+                    print(respo)
+                    # if 'https://storage.googleapis.com' not in respo:
+                    #     logger.error("issue with url")
+                    #     return "Somethings wrong with Googles"
 
-@app.route('/dupes', methods=['GET'])
-def cleanUP():
-    count = f"<H1>Removed {cloudStorage.cleanDupes(app.config['UPLOAD_FOLDER'])} Duplicates</H1>"
-    return count
+                    # logger.debug(f"{app.config['UPLOAD_FOLDER']}{filename}")
+                    responseList.append({'filename': req, 'url': respo})
+                    # # Add all that awesome information
+                    # try:
+                    #     cloudStorage.addMetadata(
+                    #         f"{app.config['UPLOAD_FOLDER']}{filename}", uploader, email)
+                    #     return "Thanks"
+
+                    # except Exception as e:
+                    #     return f"Problem With Googs - {e}"
+
+                else:
+                    return "something about not being an allowed file"
+            else:
+                return "Good"
+        print(responseList)
+        logger.debug(f'Response: {jsonify(responseList)}')
+    return jsonify(responseList)
 
 
 @app.route('/', methods=['POST'])
 def upload_file():
+
+    # Get all the Files
     files = request.files.getlist('file')
+
+    # Get the Form Text
     formInfo = request.values
+
     logger.debug(f'File Object: {files}')
     uploadCount = len(request.files.getlist('file'))
     for file in files:
@@ -64,8 +122,8 @@ def upload_file():
             longFileName = prepareFileName(secure_filename(lowerFileName))
             filename = longFileName.split(app.config['UPLOAD_FOLDER'], 1)[1]
             logger.debug(f"filename: {filename}")
-            if app.config['GCS_UPLOAD']:
-                fileHash = hashlib.md5(file.read()).hexdigest()
+            content_type = file.content_type
+            if app.config['UPLOAD_METHOD'] == "APPENGINE":
                 file.seek(0)
                 if not cloudStorage.fileExists(filename):
                     logger.debug("Uploading File")
@@ -77,17 +135,82 @@ def upload_file():
                         return "There was an Error Uploading your Images"
                 else:
                     logger.warning("Image Exists in GCS Bucket")
+            if app.config['UPLOAD_METHOD'] == "GCS":
+                file.seek(0)
+                if not cloudStorage.fileExists(filename):
+                    logger.debug("Uploading File")
+
+                    try:
+
+                        respo = cloudStorage.generate_upload_signed_url(
+                            f"{app.config['UPLOAD_FOLDER']}{filename}", content_type)
+                        logger.debug(respo)
+
+                    except Exception as e:
+
+                        logger.error(e)
+                        return "There was an Error Uploading your Images"
+                else:
+                    logger.warning("Image Exists in GCS Bucket")
         elif not file.filename:
             return 'No file in the request', 400
         elif file and not allowed_file(file.filename):
             return 'This File type is not allowed', 400
-
+    # return "true"
     return render_template('tsCOL/thanks.html', fileCount=uploadCount)
+
+
+@app.route("/images/<string:blob_name>")
+def view(blob_name):
+    values = cloudStorage.getImage(f'uploads/{blob_name}')
+    return render_template('tsCOL/images.html', content_type=values[1],  image=values[0], imageName=blob_name, metadata=values[2])
+
+
+@app.route('/dupes', methods=['GET'])
+def cleanUP():
+    count = f"<H1>Removed {cloudStorage.cleanDupes(app.config['UPLOAD_FOLDER'])} Duplicates</H1>"
+    return count
+
+
+@app.route('/thanks')
+def thanks():
+    count = request.args.get('count')
+    logger.debug(f'File Count: {count}')
+    # if not fileCount:
+    #     fileCount = "Many"
+    return render_template('tsCOL/thanks.html', fileCount=count)
+
+
+def allowed_file(filename):
+    lower = filename.lower()
+    return '.' in lower.lower() and \
+           lower.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+### Error Pages ###
+
+
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('tsCOL/index.html'), 404
 
 
 @app.errorhandler(RequestEntityTooLarge)
 def file_too_large(e):
     return 'File is too large', 413
+
+
+### Methods ###
+
+def setupCloudLogging():
+    logging_client = google.cloud.logging.Client()
+    handler = CloudLoggingHandler(logging_client)
+    # Set Cloud Side
+    logger = logging.getLogger('COLApp')
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+
+    logger.info("Cloud Logging Setup")
+    return logger
 
 
 def addNumbertoFile(filename):
@@ -122,7 +245,7 @@ def prepareFileName(fileExists):
         fullFile = os.path.join(app.config['UPLOAD_FOLDER'], fileExists)
     else:
         fullFile = fileExists
-    if app.config['GCS_UPLOAD']:
+    if app.config['UPLOAD_METHOD'] == "GCS" or app.config['UPLOAD_METHOD'] == "APPENGINE":
         # Check if filname exists in bucket
         logger.debug(f'preparing: {fullFile}')
         if not cloudStorage.fileExists(fullFile):
@@ -132,15 +255,19 @@ def prepareFileName(fileExists):
     return prepareFileName(addNumbertoFile(fullFile))
 
 
-@app.route("/images/<string:blob_name>")
-def view(blob_name):
-    values = cloudStorage.getImage(f'uploads/{blob_name}')
-    return render_template('tsCOL/images.html', content_type=values[1],  image=values[0], imageName=blob_name, metadata=values[2])
+## Logging ##
+logging.info("Setup Logging")
+if LOCAL_DEV != False:
+    logger = setupCloudLogging()
+    logger.setLevel("DEBUG")
+else:
+    logger = logging.getLogger()
+    logger.setLevel("DEBUG")
 
 
+## Debugging ##
 if __name__ == "__main__":
-    # Used when running locally only. When deploying to Google App
-    # Engine, a webserver process such as Gunicorn will serve the app. This
-    # can be configured by adding an `entrypoint` to app.yaml.
     app.run(host="localhost", port=8080, debug=True)
+    LOCAL_DEV = True
+    print("DEV")
     logger.setLevel("DEBUG")
