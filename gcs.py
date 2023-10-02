@@ -1,107 +1,122 @@
-from gcloud import storage
-from google.cloud import secretmanager
-from oauth2client.service_account import ServiceAccountCredentials
-import os
+from google.cloud import secretmanager, storage
+from google.oauth2 import service_account
+import google.auth
 import json
 import base64
 import binascii
 from wand.image import Image
 from datetime import timedelta
 import logging
+import google.cloud.logging
+from google.cloud.logging_v2.handlers import CloudLoggingHandler
 
-import sys
-## Logging ##
-logger = logging.getLogger("appLog")
-ConsoleOutputHandler = logging.StreamHandler()
-logger.addHandler(ConsoleOutputHandler)
-logger.setLevel("INFO")
 
+# Variables
 LOCAL_DEV = False
+
+# Class Definition
 
 
 class GCS:
     def __init__(self, project, bucket):
         self.project = project
         self.bucket = bucket
-        if LOCAL_DEV:
-            KEYFILE = '/Users/errol/gcpKeys/tstreck.json'
-            if os.path.exists(KEYFILE):
-                with open(KEYFILE) as jsonFile:
-                    self.credentials_dict = json.load(jsonFile)
-            else:
-                logger.error("do something")
-                exit(199)
-            # print(credentials_dict)
-            self.credentials = ServiceAccountCredentials.from_json_keyfile_dict(
-                self.credentials_dict
-            )
-            # self.client = storage.Client(credentials=self.credentials,
-            #  project=self.project)
+
+        ## Set up Secret Manager for Elevated Access ##
+        secretClient = secretmanager.SecretManagerServiceClient()
+        response = self.getSecret()
+        self.credentials = service_account.Credentials.from_service_account_info(
+            json.loads(response)
+        )
+
+        logging.info("Setup Logging")
+        if not LOCAL_DEV:
+            self.logger = self.setupCloudLogging()
+            self.logger.setLevel("DEBUG")
+            self.logger.debug("Done Logging Setup")
         else:
-            secretClient = secretmanager.SecretManagerServiceClient()
-            response = secretClient.access_secret_version(
-                name='projects/422051208073/secrets/tstrec_sa/versions/latest')
-            print(type(json.loads(response.payload.data.decode('UTF-8'))))
-            self.credentials = ServiceAccountCredentials.from_json_keyfile_dict(
-                json.loads(response.payload.data.decode('UTF-8')))
+            self.logger = logging.getLogger()
+            self.logger.setLevel("DEBUG")
+
+    def setupCloudLogging(self):
+        logging_client = google.cloud.logging.Client()
+        handler = CloudLoggingHandler(logging_client)
+        # Set Cloud Side
+        self.logger1 = logging.getLogger('GCS_Module')
+        self.logger1.setLevel(logging.DEBUG)
+        self.logger1.addHandler(handler)
+
+        self.logger1.info("GCS Module Cloud Logging Setup")
+        return self.logger1
 
     def getSecret(self):
         secretClient = secretmanager.SecretManagerServiceClient()
         response = secretClient.access_secret_version(
-            name='projects/422051208073/secrets/tstrec_sa/versions/1')
+            name='projects/422051208073/secrets/tstrec_sa/versions/latest')
         return response.payload.data.decode('UTF-8')
 
     def getClient(self):
-        if LOCAL_DEV:
-            storage_client = storage.Client(
-                credentials=self.credentials, project=self.project)
-        else:
-            storage_client = storage.Client(
-                credentials=self.credentials, project=self.project)
+
+        storage_client = storage.Client(
+            credentials=self.credentials, project=self.project)
         return storage_client
 
     def uploadFile(self, file, filename, uploader, email):
-        logger.info(f'Uploading: {filename}')
+        self.logger.info(f'Uploading: {filename}')
         client = self.getClient()
         storageBucket = client.get_bucket(self.bucket)
         blob = storageBucket.blob(filename)
         blob.content_type = file.content_type
 
         try:
-
             blob.upload_from_file(file)
-            # {'uploader': {uploader}, 'email': {email}}
-            metadata = {'uploader': uploader, 'email': email}
-            blob.metadata = metadata
-            blob.patch()
 
         except Exception as e:
 
-            logger.error(e)
+            self.logger.error(e)
             return False
         return True
 
-    def generate_upload_signed_url_v4(self, blob_name):
-        logger.debug('Generating Signed URL for {blob_name}')
+    def addMetadata(self, filename, uploader, email):
+
+        # Client Creds #
+        storage_client = self.getClient()
+        bucket = storage_client.bucket(self.bucket)
+
+        # Pull Blob by Filename #
+        blob = bucket.blob(filename)
+
+        # Create metadata object and patch
+        metadata = {'uploader': uploader, 'email': email}
+        blob.metadata = metadata
+        blob.patch()
+
+        # Verify
+
+        blob = bucket.blob(filename)
+        self.logger.debug(
+            f"Patched Metadata, New Data is: name: {uploader} - email: {email}")
+
+    def generate_upload_signed_url(self, blob_name, content_type, header):
+        self.logger.info(f'Generating Signed URL for {blob_name}')
         """Generates a v4 signed URL for uploading a blob using HTTP PUT.
 
         Note that this method requires a service account key file. You can not use
         this if you are using Application Default Credentials from Google Compute
         Engine or from the Google Cloud SDK.
         """
-        # bucket_name = 'your-bucket-name'
-        # blob_name = 'your-object-name'
+
         storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
+        self.logger.debug(self.bucket)
+        self.logger.debug(bucket)
         blob = bucket.blob(blob_name)
-
         url = blob.generate_signed_url(
-            # version="v4",
-            # This URL is valid for 15 minutes
+            version="v4",
             expiration=timedelta(minutes=15),
-            # Allow PUT requests using this URL.
             method="PUT",
-            content_type="application/octet-stream",
+            content_type=content_type,
+            headers=header
         )
 
         # print("Generated PUT signed URL:")
@@ -111,19 +126,20 @@ class GCS:
         #     "curl -X PUT -H 'Content-Type: application/octet-stream' "
         #     "--upload-file my-file '{}'".format(url)
         # )
-        logger.info(url)
+        self.logger.debug(f'FileInfo: { content_type},{blob_name}')
+        self.logger.debug(f'URL: url')
         return url
 
     def fileExists(self, filename):
-        logger.debug(f'Checking if {filename} exists')
+        self.logger.debug(f'Checking if {filename} exists')
         storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
         blob = bucket.blob(filename)
-        logger.debug(f' Exists: {blob.exists()}')
+        self.logger.debug(f' Exists: {blob.exists()}')
         return blob.exists()
 
     def getFiles(self, prefix=None):
-        logger.debug(f'Getting Files from {prefix}')
+        self.logger.debug(f'Getting Files from {prefix}')
         storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
 
@@ -133,7 +149,7 @@ class GCS:
         # return files
 
     def listFiles(self, prefix=None):
-        logger.debug(f'Listing Files from {prefix}')
+        self.logger.debug(f'Listing Files from {prefix}')
         storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
 
@@ -141,14 +157,14 @@ class GCS:
         for file in bucket.list_blobs(prefix=prefix):
             fileList.append(file.name)
         fileList.sort(reverse=True)
-        logger.debug(f'Filelist: {fileList}')
+        self.logger.debug(f'Filelist: {fileList}')
         return fileList
         # for file in files:
         #     print("")
         # return files
 
     def dupExists(self, inputHash=None, prefix=None):
-        logger.debug(f'Checking for Duplicates')
+        self.logger.debug(f'Checking for Duplicates')
         storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
 
@@ -164,9 +180,9 @@ class GCS:
     def getImage(self, image):
         storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
-        logger.debug(f'Getting Image {image}')
+        self.logger.debug(f'Getting Image {image}')
         blob = bucket.get_blob(image)
-        logger.info(f'getImage: {blob} - {image}')
+        self.logger.info(f'getImage: {blob} - {image}')
         content = blob.download_as_string()
         imageData = base64.b64encode(content).decode("utf-8")
         return [imageData, blob.content_type, blob.metadata]
@@ -203,7 +219,7 @@ class GCS:
 
     def cleanDupes(self, prefix=None):
         dupeCount = 0
-        logger.info(f'Cleaning Duplicates')
+        self.logger.info(f'Cleaning Duplicates')
         storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
 
@@ -215,27 +231,27 @@ class GCS:
             hashes.append({'name': file, 'hash': self.getHash(file)})
         print(hashes)
         for i in hashes:
-            logger.debug(f"Looking at: {i['name']}")
+            self.logger.debug(f"Looking at: {i['name']}")
             curHash = i['hash']
             # for j in self.listFiles(prefix):
             for j in hashes:
                 try:
                     if curHash == j['hash'] and i['name'] != j['name']:
-                        logger.info(
+                        self.logger.info(
                             f"Duplicate of {i['name']} - {i['hash']} found at: {j['name']} - {j['hash']}")
                         blob = bucket.get_blob(j['name'])
                         blob.delete()
-                        logger.debug(f"{i['name']} - {j['name']}")
+                        self.logger.debug(f"{i['name']} - {j['name']}")
                         for element in range(len(hashes)):
                             if hashes[element]['name'] == j['name']:
-                                logger.debug(f"Removing Element: {j['name']}")
+                                logging.debug(f"Removing Element: {j['name']}")
                                 del hashes[element]
                                 break
                         dupeCount += 1
-                        logger.info(f'Deleting: {blob.name}')
+                        self.logger.info(f'Deleting: {blob.name}')
                 except AttributeError as e:
-                    logger.info(f"Finished Files - {e}")
-        logger.info(f'Completed - removed {dupeCount}')
+                    self.logger.info(f"Finished Files - {e}")
+        self.logger.info(f'Completed - removed {dupeCount}')
         return dupeCount
 
 
@@ -244,6 +260,8 @@ class GCS:
 # # print(fileExists("testFolder/dumpsterfsdfire.jpg"))
 # print(gcs.listFiles())
 if __name__ == "__main__":
+    LOCAL_DEV = False
+    print("DEV")
     # Used when running locally only. When deploying to Google App
     # Engine, a webserver process such as Gunicorn will serve the app. This
     # can be configured by adding an `entrypoint` to app.yaml.
