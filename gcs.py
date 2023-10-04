@@ -17,6 +17,7 @@ import io
 LOCAL_DEV = False
 
 # Class Definition
+# todo: Split Image glass
 
 
 class GCS:
