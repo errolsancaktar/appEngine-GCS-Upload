@@ -1,5 +1,7 @@
 import json
 from flask import Flask, render_template, request, jsonify
+from flask_httpauth import HTTPBasicAuth
+from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
 import os
@@ -13,6 +15,20 @@ LOCAL_DEV = False
 
 
 app = Flask(__name__)
+auth = HTTPBasicAuth()
+
+users = {
+    "kristin": generate_password_hash("strecker2023")
+}
+## Auth ##
+
+
+@auth.verify_password
+def verify_password(username, password):
+    if username in users and \
+            check_password_hash(users.get(username), password):
+        return username
+
 
 ## Globals ##
 app.config['MAX_CONTENT_LENGTH'] = 784 * 1024 * 1024  # 784 MB
