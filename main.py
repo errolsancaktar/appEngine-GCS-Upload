@@ -15,6 +15,7 @@ LOCAL_DEV = False
 
 app = Flask(__name__)
 
+
 ## Globals ##
 app.config['MAX_CONTENT_LENGTH'] = 784 * 1024 * 1024  # 784 MB
 app.config['UPLOAD_FOLDER'] = "uploads/"
@@ -23,7 +24,7 @@ app.config['UPLOAD_METHOD'] = "GCS"
 app.config['STORAGE_PROJECT'] = 'theresastrecker'
 app.config['STORAGE_BUCKET'] = 'theresa-photo-storage'
 cloudStorage = gcs.GCS(project=app.config['STORAGE_PROJECT'],
-                       bucket=app.config['STORAGE_BUCKET'])
+                       bucket=app.config['STORAGE_BUCKET'], prefix=app.config['UPLOAD_FOLDER'])
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'heic', 'heif', 'webp', 'tif',
                       'tiff', 'raw', 'bmp', 'pdf', 'mpeg', 'mpg', 'ogg', 'mp4', 'avi', 'mov'}

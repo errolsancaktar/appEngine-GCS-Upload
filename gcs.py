@@ -9,6 +9,9 @@ from datetime import timedelta
 import logging
 import google.cloud.logging
 from google.cloud.logging_v2.handlers import CloudLoggingHandler
+from PIL import Image, ExifTags
+import imagehash
+import io
 
 
 # Variables
@@ -18,9 +21,10 @@ LOCAL_DEV = False
 
 
 class GCS:
-    def __init__(self, project, bucket):
+    def __init__(self, project, bucket, prefix=None):
         self.project = project
         self.bucket = bucket
+        self.prefix = prefix
 
         ## Set up Secret Manager for Elevated Access ##
         secretClient = secretmanager.SecretManagerServiceClient()
@@ -35,19 +39,19 @@ class GCS:
             self.logger.setLevel("DEBUG")
             self.logger.debug("Done Logging Setup")
         else:
-            self.logger = logging.getLogger()
+            self.logger = logging.getLogger("devlogging")
             self.logger.setLevel("DEBUG")
 
     def setupCloudLogging(self):
         logging_client = google.cloud.logging.Client()
         handler = CloudLoggingHandler(logging_client)
         # Set Cloud Side
-        self.logger1 = logging.getLogger('GCS_Module')
-        self.logger1.setLevel(logging.DEBUG)
-        self.logger1.addHandler(handler)
+        self.logger = logging.getLogger('GCS_Module')
+        self.logger.setLevel(logging.DEBUG)
+        self.logger.addHandler(handler)
 
-        self.logger1.info("GCS Module Cloud Logging Setup")
-        return self.logger1
+        self.logger.info("GCS Module Cloud Logging Setup")
+        return self.logger
 
     def getSecret(self):
         secretClient = secretmanager.SecretManagerServiceClient()
@@ -148,6 +152,24 @@ class GCS:
         #     print("")
         # return files
 
+    def getFile(self, file, prefix=None):
+
+        # Handle Prefix Fuckups
+        if '/' in file:
+            filename = file.rsplit('/', 1)[1]
+            prefix = f"{file.rsplit('/', 1)[0]}/"
+        else:
+            filename = file
+        # Get the GCS Client
+        self.logger.debug(f'Getting {filename} from {prefix}')
+        storage_client = self.getClient()
+        bucket = storage_client.bucket(self.bucket)
+
+        return bucket.get_blob(f'{prefix}{filename}')
+        # for file in files:
+        #     print("")
+        # return files
+
     def listFiles(self, prefix=None):
         self.logger.debug(f'Listing Files from {prefix}')
         storage_client = self.getClient()
@@ -185,6 +207,10 @@ class GCS:
         self.logger.info(f'getImage: {blob} - {image}')
         content = blob.download_as_string()
         imageData = base64.b64encode(content).decode("utf-8")
+        del content
+        # print(blob.content_type)
+        # print(type(content))
+        # print(dir(imageData))
         return [imageData, blob.content_type, blob.metadata]
 
     def returnImage(self, image):
@@ -208,16 +234,55 @@ class GCS:
         hash = self.hashDecode(blob.md5_hash)
         return hash
 
-    def getImageHash(self, file):
-        image = self.getImage(file)
-        imageData = image[0].encode('ascii')
-        imgType = image[1].rsplit('/', 1)[1]
-        with Image(blob=imageData, format=imgType) as img:
-            hash = img.signature
+    def getImageHash(self, file, prefix=None):
+        if '/' in file:
+            filename = file.rsplit('/', 1)[1]
+            prefix = f"{file.rsplit('/', 1)[0]}/"
+
+        image = self.getFile(filename, prefix)
+        i = io.BytesIO(image.download_as_string())
+        with Image.open(i) as img:
+            hash = imagehash.phash(img)
+        del i
         # hash = self.hashDecode(blob.md5_hash)
         return hash
 
+    def getImageSize(self, file, prefix=None):
+        if '/' in file:
+            filename = file.rsplit('/', 1)[1]
+            prefix = f"{file.rsplit('/', 1)[0]}/"
+
+        image = self.getFile(filename, prefix)
+        i = io.BytesIO(image.download_as_string())
+        with Image.open(i) as img:
+            # print(img.size)
+            w, h = img.size
+            size = w + h
+        del i
+        return size
+
+    def getImageExif(self, file, prefix=None):
+        if '/' in file:
+            filename = file.rsplit('/', 1)[1]
+            prefix = f"{file.rsplit('/', 1)[0]}/"
+        else:
+            prefix = self.prefix
+        image = self.getFile(filename, prefix)
+        i = io.BytesIO(image.download_as_string())
+        with Image.open(i) as img:
+            exif = img._getexif()
+        if exif is None:
+            print('Sorry, image has no exif data.')
+        else:
+            for key, val in exif.items():
+                if key in ExifTags.TAGS:
+                    exifData = f'{ExifTags.TAGS[key]}:{val}'
+        return print(exifData)
+
     def cleanDupes(self, prefix=None):
+        if not prefix:
+            prefix = self.prefix
+
         dupeCount = 0
         self.logger.info(f'Cleaning Duplicates')
         storage_client = self.getClient()
@@ -225,30 +290,31 @@ class GCS:
 
         ## Generate Hashes from all Files in Prefix ##
         files = self.listFiles(prefix)
+        # files = self.listFiles('uploads/img_5820')
         hashes = []
+        self.logger.debug(f'Evaluating {len(files)} Files')
         for file in files:
-
-            hashes.append({'name': file, 'hash': self.getHash(file)})
-        print(hashes)
+            hashes.append(
+                {'name': file, 'hash': self.getImageHash(file, prefix)})
+        # print(hashes)
         for i in hashes:
-            self.logger.debug(f"Looking at: {i['name']}")
+            # self.logger.debug(f"Looking at: {i['name']}")
             curHash = i['hash']
             # for j in self.listFiles(prefix):
             for j in hashes:
                 try:
-                    if curHash == j['hash'] and i['name'] != j['name']:
+                    if curHash - j['hash'] < 10 and i['name'] != j['name'] and self.getImageSize(i['name']) - self.getImageSize(j['name']) > 0:
                         self.logger.info(
-                            f"Duplicate of {i['name']} - {i['hash']} found at: {j['name']} - {j['hash']}")
+                            f"Duplicate of {i['name']} - {i['hash']} found at: {j['name']} - {j['hash']} -> {curHash - j['hash']}")
                         blob = bucket.get_blob(j['name'])
                         blob.delete()
-                        self.logger.debug(f"{i['name']} - {j['name']}")
                         for element in range(len(hashes)):
                             if hashes[element]['name'] == j['name']:
                                 logging.debug(f"Removing Element: {j['name']}")
                                 del hashes[element]
                                 break
                         dupeCount += 1
-                        self.logger.info(f'Deleting: {blob.name}')
+                        self.logger.info(f'Deleted: {blob.name}')
                 except AttributeError as e:
                     self.logger.info(f"Finished Files - {e}")
         self.logger.info(f'Completed - removed {dupeCount}')
@@ -260,12 +326,11 @@ class GCS:
 # # print(fileExists("testFolder/dumpsterfsdfire.jpg"))
 # print(gcs.listFiles())
 if __name__ == "__main__":
-    LOCAL_DEV = False
+    LOCAL_DEV = True
     print("DEV")
     # Used when running locally only. When deploying to Google App
     # Engine, a webserver process such as Gunicorn will serve the app. This
     # can be configured by adding an `entrypoint` to app.yaml.
-    # gcs = GCS('theresastrecker', 'errol-test-bucket')
-    gcs = GCS('theresastrecker', 'theresa-photo-storage')
+    gcs = GCS('theresastrecker', 'theresa-photo-storage', "uploads/")
     # gcs.cleanDupes("test/")
     # gcs.generate_upload_signed_url_v4("test")
