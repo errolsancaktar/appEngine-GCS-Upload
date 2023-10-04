@@ -296,7 +296,7 @@ class GCS:
                         self.logger.info(
                             f"Duplicate of {i['name']} - {i['hash']} found at: {j['name']} - {j['hash']} -> {curHash - j['hash']}")
                         blob = bucket.get_blob(j['name'])
-                        # blob.delete()
+                        blob.delete()
                         for element in range(len(hashes)):
                             if hashes[element]['name'] == j['name']:
                                 logging.debug(f"Removing Element: {j['name']}")
