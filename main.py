@@ -31,6 +31,7 @@ def verify_password(username, password):
 
 
 
+
 ## Globals ##
 app.config['MAX_CONTENT_LENGTH'] = 784 * 1024 * 1024  # 784 MB
 app.config['UPLOAD_FOLDER'] = "uploads/"
