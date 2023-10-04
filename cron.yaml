@@ -1,0 +1,6 @@
+cron:
+  - description: "Clean Dupes"
+    url: /dupes
+    schedule: every day 16:55
+    timezone: America/Denver
+    target: dupefinder-dot-default
