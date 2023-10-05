@@ -21,7 +21,6 @@
 
         .wrapper {
             width: 100%;
-
             display: grid;
             grid-template-columns: repeat(5, minmax(0, 1fr));
             place-items: center;
@@ -70,7 +69,7 @@
         }
 
         @media screen and (max-width: 640px) {
-            .gallery {
+            .wrapper {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
@@ -115,7 +114,7 @@
 </head>
 
 <body class="bg-dark text-light">
-    <button onclick="moveImages()" id="moveImgs" title="Finish"></button>
+    <button id="moveImgs" title="Finish"></button>
     <form id="fbtn">
         <input type="submit" id="moveBtn"></button>
     </form>
@@ -168,17 +167,17 @@
         crossorigin="anonymous"></script>
 </body>
 <script>
-    window.addEventListener("DOMContentLoaded", () => {
-        // (A) GET ALL IMAGES
-        var all = document.querySelectorAll(".container img");
+    // window.addEventListener("DOMContentLoaded", () => {
+    //     // (A) GET ALL IMAGES
+    //     var all = document.querySelectorAll(".container img");
 
-        // (B) CLICK ON IMAGE TO TOGGLE FULLSCREEN
-        if (all.length > 0) {
-            for (let img of all) {
-                img.ondblclick = () => img.classList.toggle("full");
-            }
-        }
-    });
+    //     // (B) CLICK ON IMAGE TO TOGGLE FULLSCREEN
+    //     if (all.length > 0) {
+    //         for (let img of all) {
+    //             img.ondblclick = () => img.classList.toggle("full");
+    //         }
+    //     }
+    // });
     function moveImages(prefix) {
         checkedImages = new Array;
         let checks = document.getElementsByName('Photo')
@@ -188,7 +187,7 @@
             }
         })
         console.log(checkedImages);
-        fetch('/image/move', {
+        fetch('/photo/move', {
             method: "POST",
             headers: {
                 'Accept': 'application/json',
@@ -196,6 +195,8 @@
                 'prefix': prefix,
             },
             body: JSON.stringify(checkedImages),
+        }).then(_ => {
+            location.reload(true);
         })
     }
 </script>

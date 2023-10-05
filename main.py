@@ -1,5 +1,7 @@
 import json
 from flask import Flask, render_template, request, jsonify, Response, redirect
+from flask_httpauth import HTTPBasicAuth
+from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
 import os
@@ -14,6 +16,7 @@ LOCAL_DEV = False
 
 
 app = Flask(__name__)
+auth = HTTPBasicAuth()
 
 
 ## Globals ##
@@ -31,6 +34,17 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'heic', 'heif', 'webp', 'tif'
                       'tiff', 'raw', 'bmp', 'pdf', 'mpeg', 'mpg', 'ogg', 'mp4', 'avi', 'mov'}
 PATH_BASE = os.path.dirname(os.path.abspath(__file__))
 PATH_STATIC = os.path.join(PATH_BASE, "static")
+
+users = {
+    "kristin": cloudStorage.getSecret('projects/422051208073/secrets/user/versions/latest')
+}
+
+
+@auth.verify_password
+def verify_password(username, password):
+    if username in users and \
+            check_password_hash(users.get(username), password):
+        return username
 
 ## Routing ##
 
@@ -165,20 +179,21 @@ def supload():
     return jsonify(responseList)
 
 
-@app.route("/images/<string:blob_name>")
+@app.route("/images/<string:blob_name>", methods=['GET'])
 def view(blob_name):
     values = cloudStorage.getImage(f"{app.config['UPLOAD_FOLDER']}{blob_name}")
     return render_template('tsCOL/images.html', content_type=values[1],  image=values[0], imageName=blob_name, metadata=values[2])
 
 
-@app.route("/image/move", methods=['POST'])
+@app.route("/photo/move", methods=['POST'])
+@auth.login_required
 def moveImage():
     print('in post')
     files = request.json
     prefix = request.headers.get('prefix')
+    print(files)
     for file in files:
-        # print(file)
-        # print(prefix)
+        print(file)
         cloudStorage.moveFile(file=file, newPrefix=prefix + '/')
     if prefix == "slideshow":
         loc = "Slideshow"
@@ -187,21 +202,22 @@ def moveImage():
     return f"Moved {len(files)} to {loc}"
 
 
-@app.route("/image/<string:blob_name>")
+@app.route("/image/<string:blob_name>", methods=['GET'])
 def returnImage(blob_name):
     values = cloudStorage.returnImage(
         f"{app.config['UPLOAD_FOLDER']}{blob_name}")
     return Response(values[0], mimetype=values[1])
 
 
-@app.route("/img/<string:blob_name>")
+@app.route("/img/<string:blob_name>", methods=['GET'])
 def returnImageLink(blob_name):
     values = cloudStorage.returnImage(
         f"{app.config['UPLOAD_FOLDER']}{blob_name}")
 
 
-@app.route("/gallery", defaults={'prefix': app.config['UPLOAD_FOLDER']})
-@app.route("/slideshow", defaults={'prefix': "slideshow/"})
+@app.route("/gallery", defaults={'prefix': app.config['UPLOAD_FOLDER']}, methods=['GET'])
+@app.route("/slideshow", defaults={'prefix': "slideshow/"}, methods=['GET'])
+@auth.login_required
 def viewGallery(prefix):
 
     images = cloudStorage.listFiles(prefix)
@@ -236,6 +252,7 @@ def allowed_file(filename):
 ### Error Pages ###
 
 
+@app.errorhandler(405)
 @app.errorhandler(404)
 def page_not_found(e):
     # return render_template('tsCOL/index.html'), 404

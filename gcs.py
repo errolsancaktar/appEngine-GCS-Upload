@@ -29,7 +29,8 @@ class GCS:
 
         ## Set up Secret Manager for Elevated Access ##
         # secretClient = secretmanager.SecretManagerServiceClient()
-        response = self.getSecret()
+        response = self.getSecret(
+            'projects/422051208073/secrets/tstrec_sa/versions/latest')
         self.credentials = service_account.Credentials.from_service_account_info(
             json.loads(response)
         )
@@ -54,10 +55,10 @@ class GCS:
         self.logger.info("GCS Module Cloud Logging Setup")
         return self.logger
 
-    def getSecret(self):
+    def getSecret(self, sec):
         secretClient = secretmanager.SecretManagerServiceClient()
         response = secretClient.access_secret_version(
-            name='projects/422051208073/secrets/tstrec_sa/versions/latest')
+            name=sec)
         return response.payload.data.decode('UTF-8')
 
     def getClient(self):
