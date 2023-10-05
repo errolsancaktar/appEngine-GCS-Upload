@@ -1,5 +1,5 @@
-import hashlib
-from flask import Flask, render_template, request, Response
+import json
+from flask import Flask, render_template, request, jsonify, Response, redirect
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
 import os
@@ -17,6 +17,7 @@ app = Flask(__name__)
 
 
 ## Globals ##
+
 app.config['MAX_CONTENT_LENGTH'] = 784 * 1024 * 1024  # 784 MB
 app.config['UPLOAD_FOLDER'] = "uploads/"
 app.config['GCS_UPLOAD'] = True
@@ -28,6 +29,8 @@ cloudStorage = gcs.GCS(project=app.config['STORAGE_PROJECT'],
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'heic', 'heif', 'webp', 'tif',
                       'tiff', 'raw', 'bmp', 'pdf', 'mpeg', 'mpg', 'ogg', 'mp4', 'avi', 'mov'}
+PATH_BASE = os.path.dirname(os.path.abspath(__file__))
+PATH_STATIC = os.path.join(PATH_BASE, "static")
 
 ## Routing ##
 
@@ -35,6 +38,63 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'heic', 'heif', 'webp', 'tif'
 @app.route('/')
 def upload():
     return render_template('tsCOL/index.html')
+
+
+@app.route('/', methods=['POST'])
+def upload_file():
+
+    # Get all the Files
+    files = request.files.getlist('file')
+
+    # Get the Form Text
+    formInfo = request.values
+
+    logger.debug(f'File Object: {files}')
+    uploadCount = len(request.files.getlist('file'))
+    for file in files:
+        logger.info(f'Filename: {file.filename}')
+        if file.filename and allowed_file(file.filename):
+            logger.debug(secure_filename(file.filename))
+            lowerFileName = file.filename.lower()
+            longFileName = prepareFileName(secure_filename(lowerFileName))
+            filename = longFileName.split(app.config['UPLOAD_FOLDER'], 1)[1]
+            logger.debug(f"filename: {filename}")
+            content_type = file.content_type
+            if app.config['UPLOAD_METHOD'] == "APPENGINE":
+                file.seek(0)
+                if not cloudStorage.fileExists(filename):
+                    logger.debug("Uploading File")
+                    try:
+                        cloudStorage.uploadFile(
+                            file, f"{app.config['UPLOAD_FOLDER']}{filename}", formInfo['name'], formInfo['email'])
+                    except Exception as e:
+                        logger.error(e)
+                        return "There was an Error Uploading your Images"
+                else:
+                    logger.warning("Image Exists in GCS Bucket")
+            if app.config['UPLOAD_METHOD'] == "GCS":
+                file.seek(0)
+                if not cloudStorage.fileExists(filename):
+                    logger.debug("Uploading File")
+
+                    try:
+
+                        respo = cloudStorage.generate_upload_signed_url(
+                            f"{app.config['UPLOAD_FOLDER']}{filename}", content_type)
+                        logger.debug(respo)
+
+                    except Exception as e:
+
+                        logger.error(e)
+                        return "There was an Error Uploading your Images"
+                else:
+                    logger.warning("Image Exists in GCS Bucket")
+        elif not file.filename:
+            return 'No file in the request', 400
+        elif file and not allowed_file(file.filename):
+            return 'This File type is not allowed', 400
+    # return "true"
+    return render_template('tsCOL/thanks.html', fileCount=uploadCount)
 
 
 @app.route('/sup', methods=['POST'])
@@ -105,79 +165,52 @@ def supload():
     return jsonify(responseList)
 
 
-@app.route('/', methods=['POST'])
-def upload_file():
-
-    # Get all the Files
-    files = request.files.getlist('file')
-
-    # Get the Form Text
-    formInfo = request.values
-
-    logger.debug(f'File Object: {files}')
-    uploadCount = len(request.files.getlist('file'))
-    for file in files:
-        logger.info(f'Filename: {file.filename}')
-        if file.filename and allowed_file(file.filename):
-            logger.debug(secure_filename(file.filename))
-            lowerFileName = file.filename.lower()
-            longFileName = prepareFileName(secure_filename(lowerFileName))
-            filename = longFileName.split(app.config['UPLOAD_FOLDER'], 1)[1]
-            logger.debug(f"filename: {filename}")
-            content_type = file.content_type
-            if app.config['UPLOAD_METHOD'] == "APPENGINE":
-                file.seek(0)
-                if not cloudStorage.fileExists(filename):
-                    logger.debug("Uploading File")
-                    try:
-                        cloudStorage.uploadFile(
-                            file, f"{app.config['UPLOAD_FOLDER']}{filename}", formInfo['name'], formInfo['email'])
-                    except Exception as e:
-                        logger.error(e)
-                        return "There was an Error Uploading your Images"
-                else:
-                    logger.warning("Image Exists in GCS Bucket")
-            if app.config['UPLOAD_METHOD'] == "GCS":
-                file.seek(0)
-                if not cloudStorage.fileExists(filename):
-                    logger.debug("Uploading File")
-
-                    try:
-
-                        respo = cloudStorage.generate_upload_signed_url(
-                            f"{app.config['UPLOAD_FOLDER']}{filename}", content_type)
-                        logger.debug(respo)
-
-                    except Exception as e:
-
-                        logger.error(e)
-                        return "There was an Error Uploading your Images"
-                else:
-                    logger.warning("Image Exists in GCS Bucket")
-        elif not file.filename:
-            return 'No file in the request', 400
-        elif file and not allowed_file(file.filename):
-            return 'This File type is not allowed', 400
-    # return "true"
-    return render_template('tsCOL/thanks.html', fileCount=uploadCount)
-
-
 @app.route("/images/<string:blob_name>")
 def view(blob_name):
-    values = cloudStorage.getImage(f'uploads/{blob_name}')
+    values = cloudStorage.getImage(f"{app.config['UPLOAD_FOLDER']}{blob_name}")
     return render_template('tsCOL/images.html', content_type=values[1],  image=values[0], imageName=blob_name, metadata=values[2])
 
 
-@app.route("/gallery")
-def viewGallery():
-    images = cloudStorage.getFiles(prefix=app.config['UPLOAD_FOLDER'])
-    print(images)
-    imgData = []
-    for image in images:
-        content = base64.b64encode(image.download_as_string()).decode("utf-8")
-        imgData.append(
-            {'content': content, 'name': image.name, 'content_type': image.content_type})
-    return render_template("tsCOL/gallery.html", images=imgData)
+@app.route("/image/move", methods=['POST'])
+def moveImage():
+    print('in post')
+    files = request.json
+    prefix = request.headers.get('prefix')
+    for file in files:
+        # print(file)
+        # print(prefix)
+        cloudStorage.moveFile(file=file, newPrefix=prefix + '/')
+    if prefix == "slideshow":
+        loc = "Slideshow"
+    else:
+        loc = "Gallery"
+    return f"Moved {len(files)} to {loc}"
+
+
+@app.route("/image/<string:blob_name>")
+def returnImage(blob_name):
+    values = cloudStorage.returnImage(
+        f"{app.config['UPLOAD_FOLDER']}{blob_name}")
+    return Response(values[0], mimetype=values[1])
+
+
+@app.route("/img/<string:blob_name>")
+def returnImageLink(blob_name):
+    values = cloudStorage.returnImage(
+        f"{app.config['UPLOAD_FOLDER']}{blob_name}")
+
+
+@app.route("/gallery", defaults={'prefix': app.config['UPLOAD_FOLDER']})
+@app.route("/slideshow", defaults={'prefix': "slideshow/"})
+def viewGallery(prefix):
+
+    images = cloudStorage.listFiles(prefix)
+    # imgData = []
+    # for image in images:
+    #     content = base64.b64encode(image.download_as_string()).decode("utf-8")
+    #     imgData.append(
+    #         {'content': content, 'name': image.name, 'content_type': image.content_type})
+    return render_template("tsCOL/gallery.html", images=images)
 
 
 @app.route('/dupes', methods=['GET'])
@@ -205,7 +238,8 @@ def allowed_file(filename):
 
 @app.errorhandler(404)
 def page_not_found(e):
-    return render_template('tsCOL/index.html'), 404
+    # return render_template('tsCOL/index.html'), 404
+    return redirect("/", code=302)
 
 
 @app.errorhandler(RequestEntityTooLarge)
@@ -269,31 +303,6 @@ def prepareFileName(fileExists):
     return prepareFileName(addNumbertoFile(fullFile))
 
 
-@app.route("/images/<string:blob_name>")
-def view(blob_name):
-    values = cloudStorage.getImage(f"{app.config['UPLOAD_FOLDER']}{blob_name}")
-    return render_template('tsCOL/images.html', content_type=values[1],  image=values[0], imageName=blob_name, metadata=values[2])
-
-
-@app.route("/image/<string:blob_name>")
-def returnImage(blob_name):
-    values = cloudStorage.returnImage(
-        f"{app.config['UPLOAD_FOLDER']}{blob_name}")
-    return Response(values[0], mimetype=values[1])
-
-
-@app.route("/gallery")
-def viewGallery():
-    images = cloudStorage.listFiles(prefix=app.config['UPLOAD_FOLDER'])
-    imageList = []
-    print(images)
-    for image in images:
-        print(image)
-        imageList.append(image.rsplit('/', 1)[1])
-    print(images)
-    return render_template("tsCOL/gallery.html", images=imageList)
-
-
 ## Logging ##
 logging.info("Setup Logging")
 if LOCAL_DEV != False:
@@ -304,33 +313,9 @@ else:
     logger.setLevel("DEBUG")
 
 
-@app.route("/images/<string:blob_name>")
-def view(blob_name):
-    values = cloudStorage.getImage(f"{app.config['UPLOAD_FOLDER']}{blob_name}")
-    return render_template('tsCOL/images.html', content_type=values[1],  image=values[0], imageName=blob_name, metadata=values[2])
-
-
-@app.route("/image/<string:blob_name>")
-def returnImage(blob_name):
-    values = cloudStorage.returnImage(
-        f"{app.config['UPLOAD_FOLDER']}{blob_name}")
-    return Response(values[0], mimetype=values[1])
-
-
-@app.route("/gallery")
-def viewGallery():
-    images = cloudStorage.listFiles(prefix=app.config['UPLOAD_FOLDER'])
-    imageList = []
-    print(images)
-    for image in images:
-        print(image)
-        imageList.append(image.rsplit('/', 1)[1])
-    print(images)
-    return render_template("tsCOL/gallery.html", images=imageList)
-
-
 ## Debugging ##
 if __name__ == "__main__":
-    app.run(host="localhost", port=8080, debug=True)
     LOCAL_DEV = True
     print("DEV")
+    print(app.instance_path)
+    app.run(host="localhost", port=8080, debug=True)

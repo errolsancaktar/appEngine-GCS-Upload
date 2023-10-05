@@ -9,43 +9,101 @@
     <!-- Bootstrap CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/css/bootstrap.min.css"
         integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
 
     <title>Photos of Theresa</title>
     <style>
-        /* (A) GALLERY CONTAINER */
-        /* (A1) BIG SCREENS - 3 IMAGES PER ROW */
-        .gallery {
+        * {
+            padding: 2px;
+            margin: 0;
+            box-sizing: border-box;
+        }
+
+        .wrapper {
+            width: 100%;
+
             display: grid;
             grid-template-columns: repeat(5, minmax(0, 1fr));
+            place-items: center;
             grid-gap: 10px;
             max-width: 100%;
             margin: 0 auto;
         }
 
-        /* (A2) SMALL SCREENS - 2 IMAGES PER ROW */
+        .container {
+
+            position: relative;
+            cursor: pointer;
+        }
+
+        input[type="checkbox"] {
+            -webkit-appearance: none;
+            position: relative;
+            width: 100%;
+            cursor: pointer;
+        }
+
+        input[type="checkbox"]:after {
+            position: absolute;
+            font-family: "Font Awesome 5 Free";
+            font-weight: 400;
+            content: "\f111";
+            font-size: 18px;
+            color: #478bfb;
+            right: 10px;
+            top: -5px;
+        }
+
+        input[type="checkbox"]:checked:after {
+            font-weight: 900;
+            content: "\f058";
+            color: #478bfb;
+        }
+
+        .container img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            cursor: pointer;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
         @media screen and (max-width: 640px) {
             .gallery {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
 
-        .gallery img {
-            width: 100%;
-            height: 200px;
-            object-fit: cover;
-            /* fill | contain | cover | scale-down */
+        #moveImgs {
+            display: block;
+            position: fixed;
+            bottom: 20px;
+            right: 30px;
+            z-index: 99;
+            border: none;
+            outline: none;
+            background-color: #705aa7;
+            color: white;
             cursor: pointer;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 18px;
         }
 
-        /* (C) FULLSCREEN IMAGE */
-        .gallery img.full {
-            position: absolute;
+        #moveImgs:hover {
+            background-color: #a180f5;
+        }
+
+        .container img.full {
+            position: fixed;
             margin: auto;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
             z-index: 999;
+            max-width: 70%;
             width: 100vw;
             height: 100vh;
             object-fit: contain;
@@ -57,42 +115,89 @@
 </head>
 
 <body class="bg-dark text-light">
+    <button onclick="moveImages()" id="moveImgs" title="Finish"></button>
+    <form id="fbtn">
+        <input type="submit" id="moveBtn"></button>
+    </form>
 
-    <body>
+    <script>
+        if (window.location.href.indexOf("slideshow") > -1) {
+            document.getElementById('moveImgs').innerText = "Move to Gallery"
+            document.getElementById('moveImgs').setAttribute('onclick', 'moveImages("uploads")')
 
-        <body>
-            <h1>Photos of Theresa</h1>
-            <div class="gallery">
-                {% for image in images %}
-                <!-- <a href="images/{{ image }}">
-                    <img src="image/{{ image }}" class="img-fluid rounded mx-auto d-block" style="max-width: 50%" />
-                </a> -->
-                <img src="image/{{ image }}" class="img-fluid rounded mx-auto d-block" style="max-width: 50%" />
-                <!-- <h3 class="float-right">{{ image.name }}</h3> -->
-                {% endfor %}
-            </div>
-            <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
-                integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
-                crossorigin="anonymous"></script>
-            <script src="https://cdn.jsdelivr.net/npm/popper.js@1.14.7/dist/umd/popper.min.js"
-                integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1"
-                crossorigin="anonymous"></script>
-            <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/js/bootstrap.min.js"
-                integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM"
-                crossorigin="anonymous"></script>
-        </body>
-        <script>
-            window.addEventListener("DOMContentLoaded", () => {
-                // (A) GET ALL IMAGES
-                var all = document.querySelectorAll(".gallery img");
+            document.getElementById('moveBtn').setAttribute('value', "All Images")
+            document.getElementById('fbtn').setAttribute('action', '/gallery')
+        }
+        else {
+            document.getElementById('moveImgs').innerText = "Move to Slideshow"
+            document.getElementById('moveImgs').setAttribute('onclick', 'moveImages("slideshow")')
 
-                // (B) CLICK ON IMAGE TO TOGGLE FULLSCREEN
-                if (all.length > 0) {
-                    for (let img of all) {
-                        img.onclick = () => img.classList.toggle("full");
-                    }
-                }
-            });
-        </script>
+            document.getElementById('moveBtn').setAttribute('value', "Slideshow Images")
+            document.getElementById('fbtn').setAttribute('action', '/slideshow')
+        }
+    </script>
+    </button>
+    <h1>Photos of Theresa</h1>
+    <div class="wrapper">
+        {% for image in images %}
+        <!-- <div class="img-fluid rounded mx-auto d-block"> -->
+        <div class="container">
+            <input type="checkbox" name="Photo" id="{{ image }}" />
+            <label for="{{ image }}">
+                <!-- <img src="https://theresastrecker.com/{{ image }}" class="img-fluid rounded mx-auto d-block" /> -->
+                <img src="https://theresastrecker.com/{{ image }}" />
+            </label>
+        </div>
+        <!-- <div>
+            <img src="https://theresastrecker.com/{{ image }}" class="img-fluid rounded mx-auto d-block"
+                style="max-width: 50%" />
+
+          <h3 class="float-right">{{ image.name }}</h3> -->
+
+        {% endfor %}
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+        integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.14.7/dist/umd/popper.min.js"
+        integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/js/bootstrap.min.js"
+        integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM"
+        crossorigin="anonymous"></script>
+</body>
+<script>
+    window.addEventListener("DOMContentLoaded", () => {
+        // (A) GET ALL IMAGES
+        var all = document.querySelectorAll(".container img");
+
+        // (B) CLICK ON IMAGE TO TOGGLE FULLSCREEN
+        if (all.length > 0) {
+            for (let img of all) {
+                img.ondblclick = () => img.classList.toggle("full");
+            }
+        }
+    });
+    function moveImages(prefix) {
+        checkedImages = new Array;
+        let checks = document.getElementsByName('Photo')
+        checks.forEach(e => {
+            if (e.checked) {
+                checkedImages.push(e.id);
+            }
+        })
+        console.log(checkedImages);
+        fetch('/image/move', {
+            method: "POST",
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'prefix': prefix,
+            },
+            body: JSON.stringify(checkedImages),
+        })
+    }
+</script>
 
 </html>

@@ -4,7 +4,6 @@ import google.auth
 import json
 import base64
 import binascii
-from wand.image import Image
 from datetime import timedelta
 import logging
 import google.cloud.logging
@@ -12,10 +11,11 @@ from google.cloud.logging_v2.handlers import CloudLoggingHandler
 from PIL import Image, ExifTags
 import imagehash
 import io
-
+import os
 
 # Variables
 LOCAL_DEV = False
+
 
 # Class Definition
 
@@ -25,9 +25,10 @@ class GCS:
         self.project = project
         self.bucket = bucket
         self.prefix = prefix
+        self.tempDirCreated = False
 
         ## Set up Secret Manager for Elevated Access ##
-        secretClient = secretmanager.SecretManagerServiceClient()
+        # secretClient = secretmanager.SecretManagerServiceClient()
         response = self.getSecret()
         self.credentials = service_account.Credentials.from_service_account_info(
             json.loads(response)
@@ -170,6 +171,25 @@ class GCS:
         #     print("")
         # return files
 
+    def moveFile(self, file, prefix=None, newPrefix=None):
+        if '/' in file:
+            filename = file.rsplit('/', 1)[1]
+            prefix = f"{file.rsplit('/', 1)[0]}/"
+        else:
+            filename = file
+        # Get the GCS Client
+        self.logger.debug(f'Getting {filename} from {prefix}')
+        storage_client = self.getClient()
+        bucket = storage_client.bucket(self.bucket)
+
+        srcBlob = bucket.get_blob(prefix + filename)
+        dstBlob = newPrefix + filename
+        dstBlob = bucket.copy_blob(srcBlob, bucket, dstBlob)
+        if self.fileExists(dstBlob.name):
+            # print("delete")
+            srcBlob.delete()
+        print(f'Moving blob {srcBlob} to {dstBlob}')
+
     def listFiles(self, prefix=None):
         self.logger.debug(f'Listing Files from {prefix}')
         storage_client = self.getClient()
@@ -199,7 +219,7 @@ class GCS:
                 return True
         return False
 
-    def getImage(self, image):
+    def getImage_old(self, image):
         storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
         self.logger.debug(f'Getting Image {image}')
@@ -213,12 +233,33 @@ class GCS:
         # print(dir(imageData))
         return [imageData, blob.content_type, blob.metadata]
 
+    def getImage(self, image):
+        # Setup File Info #
+        baseImage = image.rsplit('/', 1)[1]
+        iPath = os.path.join(os.path.abspath(''), 'static/dImages')
+        # Save Image If Needed #
+        fileName = os.path.join(iPath, baseImage)
+        if not os.path.exists(fileName):
+
+            # GCS Stuff #
+            storage_client = self.getClient()
+            bucket = storage_client.bucket(self.bucket)
+            self.logger.debug(f'Getting Image {image}')
+            blob = bucket.get_blob(image)
+            self.logger.info(f'getImage: {blob} - {image}')
+            print(fileName)
+            blob.download_to_filename(fileName)
+        else:
+            self.logger.debug(f'{baseImage} File Exists')
+        name = 'static/' + fileName.split('static/', 1)[1]
+        return name
+
     def returnImage(self, image):
         storage_client = self.getClient()
         bucket = storage_client.bucket(self.bucket)
-        logger.debug(f'Getting Image {image}')
+        self.logger.debug(f'Getting Image {image}')
         blob = bucket.get_blob(image)
-        logger.info(f'getImage: {blob} - {image}')
+        self.logger.info(f'getImage: {blob} - {image}')
         content = blob.download_as_string()
         return [content, blob.content_type]
 
@@ -298,39 +339,30 @@ class GCS:
                 {'name': file, 'hash': self.getImageHash(file, prefix)})
         # print(hashes)
         for i in hashes:
-            # self.logger.debug(f"Looking at: {i['name']}")
-            curHash = i['hash']
-            # for j in self.listFiles(prefix):
             for j in hashes:
                 try:
-                    if curHash - j['hash'] < 10 and i['name'] != j['name'] and self.getImageSize(i['name']) - self.getImageSize(j['name']) > 0:
-                        self.logger.info(
-                            f"Duplicate of {i['name']} - {i['hash']} found at: {j['name']} - {j['hash']} -> {curHash - j['hash']}")
-                        blob = bucket.get_blob(j['name'])
-                        blob.delete()
-                        for element in range(len(hashes)):
-                            if hashes[element]['name'] == j['name']:
-                                logging.debug(f"Removing Element: {j['name']}")
-                                del hashes[element]
-                                break
-                        dupeCount += 1
-                        self.logger.info(f'Deleted: {blob.name}')
+                    if i['hash'] - j['hash'] < 10 and i['name'] != j['name']:
+                        if self.getImageSize(i['name']) - self.getImageSize(j['name']) >= 0:
+                            self.logger.info(
+                                f"Duplicate of {i['name']} - {i['hash']} found at: {j['name']} - {j['hash']} -> {i['hash'] - j['hash']}")
+                            blob = bucket.get_blob(j['name'])
+                            blob.delete()
+                            for element in range(len(hashes)):
+                                if hashes[element]['name'] == j['name']:
+                                    logging.debug(
+                                        f"Removing Element: {j['name']}")
+                                    del hashes[element]
+                                    break
+                            dupeCount += 1
+                            self.logger.info(f'Deleted: {blob.name}')
                 except AttributeError as e:
                     self.logger.info(f"Finished Files - {e}")
         self.logger.info(f'Completed - removed {dupeCount}')
         return dupeCount
 
 
-# gcs = GCS(project='theresastrecker', bucket='theresa-photo-storage')
-# print(gcs.fileExists("uploads/dumpsterfire.jpg"))
-# # print(fileExists("testFolder/dumpsterfsdfire.jpg"))
-# print(gcs.listFiles())
+## Debug ##
 if __name__ == "__main__":
     LOCAL_DEV = True
     print("DEV")
-    # Used when running locally only. When deploying to Google App
-    # Engine, a webserver process such as Gunicorn will serve the app. This
-    # can be configured by adding an `entrypoint` to app.yaml.
     gcs = GCS('theresastrecker', 'theresa-photo-storage', "uploads/")
-    # gcs.cleanDupes("test/")
-    # gcs.generate_upload_signed_url_v4("test")
