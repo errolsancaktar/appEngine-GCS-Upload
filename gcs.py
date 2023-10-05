@@ -25,10 +25,8 @@ class GCS:
         self.project = project
         self.bucket = bucket
         self.prefix = prefix
-        self.tempDirCreated = False
 
         ## Set up Secret Manager for Elevated Access ##
-        # secretClient = secretmanager.SecretManagerServiceClient()
         response = self.getSecret(
             'projects/422051208073/secrets/tstrec_sa/versions/latest')
         self.credentials = service_account.Credentials.from_service_account_info(

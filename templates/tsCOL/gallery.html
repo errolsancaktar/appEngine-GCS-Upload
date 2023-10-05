@@ -120,7 +120,7 @@
     </form>
 
     <script>
-        if (window.location.href.indexOf("slideshow") > -1) {
+        if (window.location.href.indexOf("show") > -1) {
             document.getElementById('moveImgs').innerText = "Move to Gallery"
             document.getElementById('moveImgs').setAttribute('onclick', 'moveImages("uploads")')
 
@@ -132,7 +132,7 @@
             document.getElementById('moveImgs').setAttribute('onclick', 'moveImages("slideshow")')
 
             document.getElementById('moveBtn').setAttribute('value', "Slideshow Images")
-            document.getElementById('fbtn').setAttribute('action', '/slideshow')
+            document.getElementById('fbtn').setAttribute('action', '/show')
         }
     </script>
     </button>
@@ -144,7 +144,7 @@
             <input type="checkbox" name="Photo" id="{{ image }}" />
             <label for="{{ image }}">
                 <!-- <img src="https://theresastrecker.com/{{ image }}" class="img-fluid rounded mx-auto d-block" /> -->
-                <img src="https://theresastrecker.com/{{ image }}" />
+                <img src="https://theresastrecker.com/{{ image }}" loading="lazy" />
             </label>
         </div>
         <!-- <div>

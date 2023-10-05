@@ -50,11 +50,24 @@ def verify_password(username, password):
 
 @app.route('/')
 def upload():
+    '''Returns main site page from template'''
     return render_template('tsCOL/index.html')
 
 
 @app.route('/', methods=['POST'])
 def upload_file():
+    '''Legacy method to upload to gcs without signed urls
+        this doesnt work well if the payload is going to be larger than 30MB
+        due to appengine limitations
+
+        Post Data required:
+            multipart form with files as body
+
+        Form Data:
+            name
+            email
+
+        '''
 
     # Get all the Files
     files = request.files.getlist('file')
@@ -112,6 +125,14 @@ def upload_file():
 
 @app.route('/sup', methods=['POST'])
 def supload():
+    '''
+    Takes post data with list of filenames to be uploaded to GCS
+    Collects Filenames, Content-type and form data
+
+    Sends all information to function to return signed urls for the upload
+
+    returns list of dicts containing info needed for fetch on browser side
+    '''
     responseList = []
     for req in request.form:
         item = json.loads(request.form.get(req))
@@ -178,15 +199,25 @@ def supload():
     return jsonify(responseList)
 
 
-@app.route("/images/<string:blob_name>", methods=['GET'])
-def view(blob_name):
-    values = cloudStorage.getImage(f"{app.config['UPLOAD_FOLDER']}{blob_name}")
-    return render_template('tsCOL/images.html', content_type=values[1],  image=values[0], imageName=blob_name, metadata=values[2])
+# @app.route("/images/<string:blob_name>", methods=['GET'])
+# def view(blob_name):
+#     values = cloudStorage.getImage(f"{app.config['UPLOAD_FOLDER']}{blob_name}")
+#     return render_template('tsCOL/images.html', content_type=values[1],  image=values[0], imageName=blob_name, metadata=values[2])
 
 
 @app.route("/photo/move", methods=['POST'])
 @auth.login_required
 def moveImage():
+    '''
+    Takes filenames and new location prefix as form data
+
+    Sends to backend func to do the actual move
+
+    Formdata:
+        list of filenames
+    Header:
+        prefix: should be the prefix of the new location
+    '''
     print('in post')
     files = request.json
     prefix = request.headers.get('prefix')
@@ -201,36 +232,36 @@ def moveImage():
     return f"Moved {len(files)} to {loc}"
 
 
-@app.route("/image/<string:blob_name>", methods=['GET'])
-def returnImage(blob_name):
-    values = cloudStorage.returnImage(
-        f"{app.config['UPLOAD_FOLDER']}{blob_name}")
-    return Response(values[0], mimetype=values[1])
-
-
-@app.route("/img/<string:blob_name>", methods=['GET'])
-def returnImageLink(blob_name):
-    values = cloudStorage.returnImage(
-        f"{app.config['UPLOAD_FOLDER']}{blob_name}")
-
-
 @app.route("/gallery", defaults={'prefix': app.config['UPLOAD_FOLDER']}, methods=['GET'])
-@app.route("/slideshow", defaults={'prefix': "slideshow/"}, methods=['GET'])
+@app.route("/show", defaults={'prefix': "slideshow/"}, methods=['GET'])
 @auth.login_required
 def viewGallery(prefix):
-
+    '''
+    Gallery
+        location to view uploaded images and move them between 2 folders
+    '''
     images = cloudStorage.listFiles(prefix)
     return render_template("tsCOL/gallery.html", images=images)
 
 
 @app.route('/dupes', methods=['GET'])
 def cleanUP():
+    '''
+    Duplicate Finder
+        endpoint to allow for scheduled runs of the cleanDupes function
+
+    '''
     count = f"<H1>Removed {cloudStorage.cleanDupes(app.config['UPLOAD_FOLDER'])} Duplicates</H1>"
     return count
 
 
 @app.route('/thanks')
 def thanks():
+    '''
+    Nice formatted location to send after upload
+    deprecated in lieu of js mutations
+
+    '''
     count = request.args.get('count')
     logger.debug(f'File Count: {count}')
     # if not fileCount:
@@ -239,6 +270,10 @@ def thanks():
 
 
 def allowed_file(filename):
+    '''
+    Checks to make sure the files being uploaded are appropriate
+
+    '''
     lower = filename.lower()
     return '.' in lower.lower() and \
            lower.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -249,6 +284,9 @@ def allowed_file(filename):
 @app.errorhandler(405)
 @app.errorhandler(404)
 def page_not_found(e):
+    '''
+    Redirect if issue with uri
+    '''
     # return render_template('tsCOL/index.html'), 404
     return redirect("/", code=302)
 
@@ -261,6 +299,9 @@ def file_too_large(e):
 ### Methods ###
 
 def setupCloudLogging():
+    '''
+    Send logs to cloud logging when not running locally
+    '''
     logging_client = google.cloud.logging.Client()
     handler = CloudLoggingHandler(logging_client)
     # Set Cloud Side
