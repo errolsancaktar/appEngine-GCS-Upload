@@ -5,7 +5,6 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
 import os
-import base64
 import logging
 import google.cloud.logging
 from google.cloud.logging_v2.handlers import CloudLoggingHandler
@@ -221,11 +220,6 @@ def returnImageLink(blob_name):
 def viewGallery(prefix):
 
     images = cloudStorage.listFiles(prefix)
-    # imgData = []
-    # for image in images:
-    #     content = base64.b64encode(image.download_as_string()).decode("utf-8")
-    #     imgData.append(
-    #         {'content': content, 'name': image.name, 'content_type': image.content_type})
     return render_template("tsCOL/gallery.html", images=images)
 
 
