@@ -139,20 +139,12 @@
     <h1>Photos of Theresa</h1>
     <div class="wrapper">
         {% for image in images %}
-        <!-- <div class="img-fluid rounded mx-auto d-block"> -->
         <div class="container">
             <input type="checkbox" name="Photo" id="{{ image }}" />
             <label for="{{ image }}">
-                <!-- <img src="https://theresastrecker.com/{{ image }}" class="img-fluid rounded mx-auto d-block" /> -->
-                <img src="https://theresastrecker.com/{{ image }}" loading="lazy" />
+                <img src="https://storage.googleapis.com/theresa-photo-storage/{{ image }}" loading="lazy" />
             </label>
         </div>
-        <!-- <div>
-            <img src="https://theresastrecker.com/{{ image }}" class="img-fluid rounded mx-auto d-block"
-                style="max-width: 50%" />
-
-          <h3 class="float-right">{{ image.name }}</h3> -->
-
         {% endfor %}
     </div>
 
